@@ -1,3 +1,14 @@
+<?php
+
+    session_start();
+    if(isset($_SESSION['username'])){
+        header("Location: index.php");
+    }else{
+        header("");
+    }
+
+?>
+
 <!doctype html>
 <html lang="en">
 
@@ -24,11 +35,20 @@
             <h1 class="text-center mb-4" style="font-size: 2.5rem; font-weight: bold;">REGISTER</h1>
             
             <div class="row g-3">
+
                 <!-- Username -->
                 <div class="col-md-6">
                     <div class="form-outline">
                         <input type="text" id="username" class="form-control" required />
                         <label class="form-label" for="username">Username</label>
+                    </div>
+                </div>
+
+                <!-- Email -->
+                <div class="col-md-6">
+                    <div class="form-outline">
+                        <input type="email" id="email" class="form-control" required />
+                        <label class="form-label" for="email">Email</label>
                     </div>
                 </div>
 
@@ -40,11 +60,11 @@
                     </div>
                 </div>
 
-                <!-- Email -->
+                <!-- Password Confirmation -->
                 <div class="col-md-6">
                     <div class="form-outline">
-                        <input type="email" id="email" class="form-control" required />
-                        <label class="form-label" for="email">Email</label>
+                        <input type="password" id="passwordConf" class="form-control" required />
+                        <label class="form-label" for="passwordConf">Password</label>
                     </div>
                 </div>
 
@@ -73,12 +93,13 @@
                 </div>
 
                 <!-- Profile Picture -->
-                <div class="col-md-12">
-                    <div class="mb-4">
+                <div class="col-md-6">
+                    <div class="form-outline">
                         <input type="file" id="profilePicture" class="form-control" accept="image/*"/> <!-- Se non mette l'immagine viene assegnata quella standard-->
                         <label class="form-label" for="profilePicture">Profile Picture</label>
                     </div>
                 </div>
+
             </div>
 
             <!-- Submit Button -->
