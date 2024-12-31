@@ -1,10 +1,61 @@
 <?php
+    /*if (!isset($conn) || $conn == null) {
+        require 'conf.php';
+    }*/
 
     session_start();
     if(isset($_SESSION['username'])){
         header("Location: index.php");
     }else{
         header("");
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+        require 'conf.php';
+
+        $username = $_POST['username'];
+        $email = $_POST['email'];
+        $password = $_POST['password'];
+        $passwordConf = $_POST['passwordConf'];
+        $dob = $_POST['dob'];
+        $name = $_POST['name'];
+        $surname = $_POST['surname'];
+        
+        if(isset($_POST['profilePicture'])){
+            $profilePicture = $_POST['profilePicture'];
+        } else{
+            $profilePicture = 'nopfp.png';
+        }
+
+        $profilePicture = $_POST['profilePicture'];
+
+        if ($password != $passwordConf) {
+
+            echo "<script>alert('Passwords do not match!');</script>";
+
+        } else {
+            $stmt = $conn->prepare("SELECT * FROM users WHERE username = :username OR email = :email");
+            $stmt->bindParam(':username', $username);
+            $stmt->bindParam(':email', $email);
+            $stmt->execute();
+
+            if ($stmt->rowCount() > 0) {
+                echo "<script>alert('Username or email already in use!');</script>";
+            } else {
+                $stmt = $conn->prepare("INSERT INTO users (username, email, password, dob, name, surname, profilePicture) VALUES (:username, :email, :password, :dob, :name, :surname, :profilePicture)");
+                $stmt->bindParam(':username', $username);
+                $stmt->bindParam(':email', $email);
+                $stmt->bindParam(':password', $password);
+                $stmt->bindParam(':dob', $dob);
+                $stmt->bindParam(':name', $name);
+                $stmt->bindParam(':surname', $surname);
+                $stmt->bindParam(':profilePicture', $profilePicture);
+                $stmt->execute();
+
+                echo "<script>alert('Registration successful!');</script>";
+                header("Location: login.php");
+            }
+        }
     }
 
 ?>
@@ -31,7 +82,7 @@
     </nav>
 
     <div class="container d-flex justify-content-center mt-5">
-        <form>
+        <form method="POST">
             <h1 class="text-center mb-4" style="font-size: 2.5rem; font-weight: bold;">REGISTER</h1>
             
             <div class="row g-3">
