@@ -26,6 +26,40 @@ $stmt->bindValue(":username", $username);
 $stmt->execute();
 $row = $stmt->fetch(PDO::FETCH_ASSOC);
 $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profile picture
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_project'])) {
+    $title = htmlspecialchars($_POST['title']);
+    $description = htmlspecialchars($_POST['description']);
+    $date_creation = date('Y-m-d');
+    $id_creator = $username; // Username dalla sessione
+    
+    try {
+        // Inserisci il progetto nella tabella tm1_projects
+        $query = "INSERT INTO tm1_projects (title, description, date_creation, id_creator) 
+                  VALUES (:title, :description, :date_creation, :id_creator)";
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':title', $title);
+        $stmt->bindValue(':description', $description);
+        $stmt->bindValue(':date_creation', $date_creation);
+        $stmt->bindValue(':id_creator', $id_creator);
+        $stmt->execute();
+        
+        // Recupera l'ID del progetto appena creato
+        $project_id = $conn->lastInsertId();
+
+        // Inserisci nella tabella tm1_user_project con ruolo di creator (id_role = 1)
+        $query = "INSERT INTO tm1_user_project (id_user, id_project, id_role) 
+                  VALUES (:id_user, :id_project, :id_role)";
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':id_user', $id_creator);
+        $stmt->bindValue(':id_project', $project_id);
+        $stmt->bindValue(':id_role', 1); // Creator
+        $stmt->execute();
+        echo "<script>alert('Project created successfully!');</script>";
+    } catch (PDOException $e) {
+        echo "<script>alert(Error: " . htmlspecialchars($e->getMessage()) . ");</script>";
+    }
+}
 ?>
 
 <!doctype html>
@@ -34,12 +68,8 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tanger - Projects</title>
+    <title>Tanger - Create New Project</title>
     <link rel="icon" type="image/x-icon" href="img/tanger_favi.png">
-    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-    <script type="text/javascript">
-        google.charts.load('current', { 'packages': ['corechart'] });
-    </script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
 
     <style>
@@ -145,102 +175,33 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                         <strong><?= date("l, F j, Y") ?></strong>
                     </div>
                     <div class="row mb-2">
-                        Your projects:
-                    </div>
-                    <div class="row mb-2">
-                    <?php
-                        // Fetch projects linked to the user along with roles
-                        $query = "SELECT 
-                                    id, 
-                                    title, 
-                                    description, 
-                                    date_creation
-                                FROM 
-                                    tm1_projects
-                                WHERE 
-                                    id_creator = :username";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bindParam(':username', $username);
-                        $stmt->execute();
-                        $projects_created = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                        if (empty($projects_created)) {
-                            echo "<p>No projects found.</p>";
-                        } else {
-                            foreach ($projects_created as $project) {
-                                echo '
-                                <div class="col-md-3 d-flex mb-2">
-                                    <div class="card flex-fill" style="width: 100%;">
-                                        <div class="card-body">
-                                            <h5 class="card-title">' . htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8') . '</h5>
-                                            <p class="card-text">' . htmlspecialchars($project['description'], ENT_QUOTES, 'UTF-8') . '</p>
-                                        </div>
-                                        <ul class="list-group list-group-flush">
-                                            <li class="list-group-item">Created on: ' . htmlspecialchars($project['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
-                                        </ul>
-                                        <div class="card-body">
-                                            <a href="project-details.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
-                                            <a href="edit-project.php?id=' . urlencode($project['id']) . '" class="card-link">Edit Project</a>
-                                        </div>
-                                    </div>
-                                </div>';
-                            }
-                        }                        
-                        ?>
-                    </div>
-                    <div class="row mb-2">
-                        Projects you are a part of:
-                    </div>
-                    <div class="row mb-2">
-                    <?php
-                        $query = "SELECT 
-                                    p.id, 
-                                    p.title, 
-                                    p.description, 
-                                    p.date_creation, 
-                                    p.id_creator, 
-                                    r.role_name
-                                    FROM 
-                                    tm1_projects p
-                                    JOIN 
-                                    tm1_user_project up ON p.id = up.id_project
-                                    JOIN 
-                                    tm1_roles r ON up.id_role = r.id
-                                    JOIN 
-                                    tm1_users u ON up.id_user = u.username
-                                    WHERE 
-                                    u.username = :username";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bindParam(':username', $username);
-                        $stmt->execute();
-                        $projects_part_of = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                        <form method="POST">
+                            <h2 class="text-center mb-4" style="font-size: 2rem; font-weight: bold;">Create New Project</h2>
+                            <div class="row g-3">
 
-            
-                        if (empty($projects_part_of)) {
-                            echo "<p>No projects found.</p>";
-                        } else {
-                            foreach ($projects_part_of as $project) {
-                                echo '
-                                <div class="col-md-3 d-flex mb-2">
-                                    <div class="card flex-fill" style="width: 100%;">
-                                        <div class="card-body">
-                                            <h5 class="card-title">' . htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8') . '</h5>
-                                            <p class="card-text">' . htmlspecialchars($project['description'], ENT_QUOTES, 'UTF-8') . '</p>
-                                        </div>
-                                        <ul class="list-group list-group-flush">
-                                            <li class="list-group-item">Created on: ' . htmlspecialchars($project['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
-                                            <li class="list-group-item">Creator ID: ' . htmlspecialchars($project['id_creator'], ENT_QUOTES, 'UTF-8') . '</li>
-                                            <li class="list-group-item">Role: ' . htmlspecialchars($project['role_name'], ENT_QUOTES, 'UTF-8') . '</li>
-                                        </ul>
-                                        <div class="card-body">
-                                            <a href="project-details.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
-                                            <a href="edit-project.php?id=' . urlencode($project['id']) . '" class="card-link">Edit Project</a>
-                                        </div>
+                                <!-- Project Title -->
+                                <div class="col-md-6">
+                                    <div class="form-outline">
+                                        <input type="text" name="title" id="title" class="form-control" required />
+                                        <label class="form-label" for="title">Project Title</label>
                                     </div>
-                                </div>';
-                            }
-                        }
-                        
-                        ?>
+                                </div>
+
+                                <!-- Project Description -->
+                                <div class="col-md-6">
+                                    <div class="form-outline">
+                                        <textarea name="description" id="description" class="form-control" rows="3" required></textarea>
+                                        <label class="form-label" for="description">Project Description</label>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <!-- Submit Button -->
+                            <div class="d-flex justify-content-center mt-4">
+                                <button type="submit" name="create_project" class="btn btn-block btn-mb-4" style="background: rgb(248, 179, 2)">Create Project</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>

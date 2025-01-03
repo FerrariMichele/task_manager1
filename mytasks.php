@@ -110,7 +110,7 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                                     </a>
                                 </li>
                                 <li>
-                                    <a href="#" class="nav-link text-black px-0">
+                                    <a href="newproj.php" class="nav-link text-black px-0">
                                         <span class="d-none d-sm-inline">New Project</span>
                                     </a>
                                 </li>
