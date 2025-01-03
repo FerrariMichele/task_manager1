@@ -14,8 +14,6 @@
 
       $username = $_POST['username'];
       
-      var_dump($_POST);
-      
       $email = $_POST['email'];
       $password = $_POST['password'];
       $passwordConf = $_POST['passwordConf'];
@@ -35,14 +33,10 @@
           $extension = strtolower($fileInfo['extension']); // Ensure the extension is lowercase
 
           // Set the new file name as username.extension
-          $profilePicture = $username . '.' . $extension;
+          $timestamp = time();
+          $profilePicture = $username . "_$timestamp." . $extension;
           $targetFilePath = $targetDir . $profilePicture;
 
-          // Move the uploaded file to the target directory
-          if (!move_uploaded_file($_FILES["profilePicture"]["tmp_name"], $targetFilePath)) {
-              echo "<script>alert('Failed to upload profile picture. Using default.');</script>";
-              $profilePicture = 'nopfp.png'; // Revert to default if upload fails
-          }
       }
 
       // Check if passwords match
@@ -72,10 +66,15 @@
               $stmt->bindParam(':profilePicture', $profilePicture);
 
               if ($stmt->execute()) {
-              	  $_SESSION['username'] = $username;
-                  echo "<script>alert('Registration successful!');</script>";
-                  header("Location: login.php");
-                  exit();
+                    $_SESSION['username'] = $username;
+                    // Move the uploaded file to the target directory
+                    if (!move_uploaded_file($_FILES["profilePicture"]["tmp_name"], $targetFilePath)) {
+                        echo "<script>alert('Failed to upload profile picture. Using default.');</script>";
+                        $profilePicture = 'nopfp.png'; // Revert to default if upload fails
+                    }
+                    echo "<script>alert('Registration successful!');</script>";
+                    header("Location: login.php");
+                    exit();
               } else {
                   echo "<script>alert('Error during registration. Please try again.');</script>";
               }

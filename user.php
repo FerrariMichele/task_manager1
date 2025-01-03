@@ -20,40 +20,77 @@
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-        require 'conf.php';
-
-        $email = $_POST['email'];
-        $password = $_POST['password'];
-        $passwordConf = $_POST['passwordConf'];
-        $dob = $_POST['dob'];
-        $name = $_POST['name'];
-        $surname = $_POST['surname'];
+        $email = $_POST['email'] ?? $user['email'];
         
-        if(isset($_POST['profilePicture'])){
-            $profilePicture = $_POST['profilePicture'];
-        } else{
-            if(isset($user['pfp_image_url'])){
-                $profilePicture = $user['pfp_image_url'];
-            } else{
-                $profilePicture = 'nopfp.png';
+        // Password Handling
+        if (!empty($_POST['password']) && !empty($_POST['passwordConf'])) {
+            if ($_POST['password'] === $_POST['passwordConf']) {
+                $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+            } else {
+                echo "<script>alert('Passwords do not match.');</script>";
+                exit();
+            }
+        } else {
+            $password = $user['password']; // Use the existing password hash
+        }
+
+        $dob = $_POST['dob'] ?? $user['date_birth'];
+        $name = $_POST['name'] ?? $user['name'];
+        $surname = $_POST['surname'] ?? $user['surname'];
+        $profilePicture = $user['pfp_image_url'];
+    
+        if (isset($_FILES['profilePicture']) && $_FILES['profilePicture']['error'] === UPLOAD_ERR_OK) {
+            $targetDir = "uploads/";
+            $fileInfo = pathinfo($_FILES["profilePicture"]["name"]);
+            $extension = strtolower($fileInfo['extension']);
+            
+            // Validate file extension and MIME type
+            $validExtensions = ['jpg', 'jpeg', 'png', 'gif']; // Add allowed extensions here
+            $mimeType = mime_content_type($_FILES["profilePicture"]["tmp_name"]);
+            $validMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
+            
+            if (!in_array($extension, $validExtensions) || !in_array($mimeType, $validMimeTypes)) {
+                echo "<script>alert('Invalid file type. Please upload a valid image.');</script>";
+            } else {
+                $timestamp = time();
+                $newProfilePicture = $username . "_$timestamp." . $extension;
+                $targetFilePath = $targetDir . $newProfilePicture;
+        
+                // Backup or remove the old file
+                if (!empty($user['pfp_image_url']) && file_exists($targetDir . $user['pfp_image_url'])) {
+                    $backupFilePath = $targetDir . "backup_" . pathinfo($user['pfp_image_url'], PATHINFO_FILENAME) . ".$timestamp." . pathinfo($user['pfp_image_url'], PATHINFO_EXTENSION);
+                    rename($targetDir . $user['pfp_image_url'], $backupFilePath);
+                }
+        
+                // Move the uploaded file
+                if (move_uploaded_file($_FILES["profilePicture"]["tmp_name"], $targetFilePath)) {
+                    $profilePicture = $newProfilePicture;
+                } else {
+                    echo "<script>alert('Failed to upload profile picture. Retaining current picture.');</script>";
+                }
             }
         }
 
-        if ($password != $passwordConf) {
-            echo "<script>alert('Passwords do not match!');</script>";
-        } else {
-            $stmt = $conn->prepare("UPDATE tm1_users SET email = :email, password = :password, date_birth = :dob, name = :name, surname = :surname, pfp_image_url = :profilePicture WHERE username = :username");
-            $stmt->bindParam(':username', $username);
-            $stmt->bindParam(':email', $email);
-            $stmt->bindParam(':password', $password);
-            $stmt->bindParam(':dob', $dob);
-            $stmt->bindParam(':name', $name);
-            $stmt->bindParam(':surname', $surname);
-            $stmt->bindParam(':profilePicture', $profilePicture);
-            $stmt->execute();
-
+        // Update database
+        $stmt = $conn->prepare("
+            UPDATE tm1_users 
+            SET email = :email, date_birth = :dob, name = :name, surname = :surname, pfp_image_url = :profilePicture, password = :password 
+            WHERE username = :username
+        ");
+        $stmt->bindParam(':username', $username);
+        $stmt->bindParam(':email', $email);
+        $stmt->bindParam(':dob', $dob);
+        $stmt->bindParam(':name', $name);
+        $stmt->bindParam(':surname', $surname);
+        $stmt->bindParam(':profilePicture', $profilePicture);
+        $stmt->bindParam(':password', $password);
+    
+        if ($stmt->execute()) {
             echo "<script>alert('Profile updated successfully!');</script>";
             header("Location: user.php");
+            exit();
+        } else {
+            echo "<script>alert('Error updating profile. Please try again.');</script>";
         }
     }
 
@@ -111,7 +148,7 @@
                 <!-- Password -->
                 <div class="col-md-6">
                     <div class="form-outline">
-                        <input type="password" id="password" name="password" class="form-control" required />
+                        <input type="password" id="password" name="password" class="form-control"/>
                         <label class="form-label" for="password">Password</label>
                     </div>
                 </div>
@@ -119,7 +156,7 @@
                 <!-- Password Confirmation -->
                 <div class="col-md-6">
                     <div class="form-outline">
-                        <input type="password" id="passwordConf" name="passwordConf" class="form-control" required />
+                        <input type="password" id="passwordConf" name="passwordConf" class="form-control"/>
                         <label class="form-label" for="passwordConf">Confirm Password</label>
                     </div>
                 </div>
