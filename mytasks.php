@@ -105,7 +105,7 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                                     </a>
                                 </li>
                                 <li>
-                                    <a href="#" class="nav-link text-black px-0">
+                                    <a href="myproj.php" class="nav-link text-black px-0">
                                         <span class="d-none d-sm-inline">My Projects</span>
                                     </a>
                                 </li>
@@ -145,7 +145,7 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                         <strong><?= date("l, F j, Y") ?></strong>
                     </div>
                     <div class="row mb-2">
-                        Your advancement on the tasks you are working on:
+                        Your tasks:
                     </div>
                     <div class="row mb-2">
                         <?php
@@ -160,65 +160,70 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                         $stmt->execute();
                         $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-                        foreach ($tasks as $index => $task) {
-                            $advancement = htmlspecialchars($task['advancement_perc'], ENT_QUOTES, 'UTF-8');
-                            echo '
-                            <div class="col-md-3 d-flex mb-2">
-                                <div class="card flex-fill" style="width: 100%;">
-                                    <div id="chart_' . $index . '" style="width: 100%; height: 10vw;"></div>
-                                    <div class="card-body">
-                                        <h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8') . '</h5>
-                                        <p class="card-text">' . htmlspecialchars($task['description'], ENT_QUOTES, 'UTF-8') . '</p>
-                                        <p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>
+                        if (empty($tasks)) {
+                            echo "<p>No tasks found.</p>";
+                        }
+                        else {
+                            foreach ($tasks as $index => $task) {
+                                $advancement = htmlspecialchars($task['advancement_perc'], ENT_QUOTES, 'UTF-8');
+                                echo '
+                                <div class="col-md-3 d-flex mb-2">
+                                    <div class="card flex-fill" style="width: 100%;">
+                                        <div id="chart_' . $index . '" style="width: 100%; height: 10vw;"></div>
+                                        <div class="card-body">
+                                            <h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8') . '</h5>
+                                            <p class="card-text">' . htmlspecialchars($task['description'], ENT_QUOTES, 'UTF-8') . '</p>
+                                            <p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>
+                                        </div>
+                                        <ul class="list-group list-group-flush">
+                                            <li class="list-group-item">Priority: ' . htmlspecialchars($task['priority_level'], ENT_QUOTES, 'UTF-8') . '</li>
+                                            <li class="list-group-item">Created on: ' . htmlspecialchars($task['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
+                                            <li class="list-group-item">Due Date: ' . htmlspecialchars($task['date_completion'], ENT_QUOTES, 'UTF-8') . '</li>
+                                            <li class="list-group-item">Advancement: ' . htmlspecialchars($task['advancement_perc'], ENT_QUOTES, 'UTF-8') . '%</li>
+                                        </ul>
+                                        <div class="card-body">
+                                            <a href="task-details.php?id=' . urlencode($task['id']) . '" class="card-link">View Details</a>
+                                            <a href="edit-task.php?id=' . urlencode($task['id']) . '" class="card-link">Edit Task</a>
+                                        </div>
                                     </div>
-                                    <ul class="list-group list-group-flush">
-                                        <li class="list-group-item">Priority: ' . htmlspecialchars($task['priority_level'], ENT_QUOTES, 'UTF-8') . '</li>
-                                        <li class="list-group-item">Created on: ' . htmlspecialchars($task['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
-                                        <li class="list-group-item">Due Date: ' . htmlspecialchars($task['date_completion'], ENT_QUOTES, 'UTF-8') . '</li>
-                                        <li class="list-group-item">Advancement: ' . htmlspecialchars($task['advancement_perc'], ENT_QUOTES, 'UTF-8') . '%</li>
-                                    </ul>
-                                    <div class="card-body">
-                                        <a href="task-details.php?id=' . urlencode($task['id']) . '" class="card-link">View Details</a>
-                                        <a href="edit-task.php?id=' . urlencode($task['id']) . '" class="card-link">Edit Task</a>
-                                    </div>
-                                </div>
-                            </div>';
-
-                            ?>
-                                <script type="text/javascript">
-                                    function drawCharts() {
-                                        // Loop through the charts to redraw them dynamically
-                                        <?php foreach ($tasks as $index => $task): ?>
-                                            (function () {
-                                                var container = document.getElementById("chart_<?= $index ?>");
-                                                var width = container.getBoundingClientRect().width;
-                                                var height = Math.min(container.getBoundingClientRect().height, width * 0.6); // Maintain aspect ratio
-
-                                                var data = google.visualization.arrayToDataTable([
-                                                    ["Effort", "Amount"],
-                                                    ["Completed", <?= $task['advancement_perc'] ?>],
-                                                    ["Remaining", <?= 100 - $task['advancement_perc'] ?>]
-                                                ]);
-
-                                                var options = {
-                                                    pieHole: 0.5,
-                                                    pieSliceTextStyle: { color: "black" },
-                                                    legend: "none",
-                                                    width: width,
-                                                    height: height
-                                                };
-
-                                                var chart = new google.visualization.PieChart(container);
-                                                chart.draw(data, options);
-                                            })();
-                                        <?php endforeach; ?>
-                                    }
-
-                                    google.charts.setOnLoadCallback(drawCharts);
-
-                                    window.addEventListener("resize", drawCharts);
-                                </script>
-                            <?php
+                                </div>';
+    
+                                ?>
+                                    <script type="text/javascript">
+                                        function drawCharts() {
+                                            // Loop through the charts to redraw them dynamically
+                                            <?php foreach ($tasks as $index => $task): ?>
+                                                (function () {
+                                                    var container = document.getElementById("chart_<?= $index ?>");
+                                                    var width = container.getBoundingClientRect().width;
+                                                    var height = Math.min(container.getBoundingClientRect().height, width * 0.6); // Maintain aspect ratio
+    
+                                                    var data = google.visualization.arrayToDataTable([
+                                                        ["Effort", "Amount"],
+                                                        ["Completed", <?= $task['advancement_perc'] ?>],
+                                                        ["Remaining", <?= 100 - $task['advancement_perc'] ?>]
+                                                    ]);
+    
+                                                    var options = {
+                                                        pieHole: 0.5,
+                                                        pieSliceTextStyle: { color: "black" },
+                                                        legend: "none",
+                                                        width: width,
+                                                        height: height
+                                                    };
+    
+                                                    var chart = new google.visualization.PieChart(container);
+                                                    chart.draw(data, options);
+                                                })();
+                                            <?php endforeach; ?>
+                                        }
+    
+                                        google.charts.setOnLoadCallback(drawCharts);
+    
+                                        window.addEventListener("resize", drawCharts);
+                                    </script>
+                                <?php
+                            }
                         }
                         ?>
                     </div>

@@ -34,7 +34,7 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tanger - Dashboard</title>
+    <title>Tanger - Projects</title>
     <link rel="icon" type="image/x-icon" href="img/tanger_favi.png">
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <script type="text/javascript">
@@ -145,131 +145,101 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                         <strong><?= date("l, F j, Y") ?></strong>
                     </div>
                     <div class="row mb-2">
-                        Your advancement on the tasks you are working on:
+                        Your projects:
                     </div>
                     <div class="row mb-2">
-                        <?php
-                        // Fetch tasks sorted by advancement percentage in descending order
-                        $stmt = $conn->prepare("SELECT t.*, ut.advancement_perc, p.title AS project_title
-                                                FROM tm1_tasks t
-                                                JOIN tm1_user_task ut ON t.id = ut.id_task
-                                                LEFT JOIN tm1_projects p ON t.id_project = p.id
-                                                WHERE ut.id_user = :id_user
-                                                ORDER BY ut.advancement_perc DESC
-                                                LIMIT 4");
-                        $stmt->bindParam(':id_user', $username);
+                    <?php
+                        // Fetch projects linked to the user along with roles
+                        $query = "SELECT 
+                                    id, 
+                                    title, 
+                                    description, 
+                                    date_creation
+                                FROM 
+                                    tm1_projects
+                                WHERE 
+                                    id_creator = :username";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bindParam(':username', $username);
                         $stmt->execute();
-                        $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-                        if (empty($tasks)) {
-                            echo "<p>No tasks found.</p>";
+                        $projects_created = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                        if (empty($projects_created)) {
+                            echo "<p>No projects found.</p>";
                         } else {
-                            foreach ($tasks as $index => $task) {
-                                $advancement = htmlspecialchars($task['advancement_perc'], ENT_QUOTES, 'UTF-8');
+                            foreach ($projects_created as $project) {
                                 echo '
                                 <div class="col-md-3 d-flex mb-2">
                                     <div class="card flex-fill" style="width: 100%;">
                                         <div class="card-body">
-                                            <h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8') . '</h5>
-                                            <p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>
+                                            <h5 class="card-title">' . htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8') . '</h5>
+                                            <p class="card-text">' . htmlspecialchars($project['description'], ENT_QUOTES, 'UTF-8') . '</p>
                                         </div>
                                         <ul class="list-group list-group-flush">
-                                            <li class="list-group-item">Priority: ' . htmlspecialchars($task['priority_level'], ENT_QUOTES, 'UTF-8') . '</li>
-                                            <li class="list-group-item">Due Date: ' . htmlspecialchars($task['date_completion'], ENT_QUOTES, 'UTF-8') . '</li>
-                                            <li class="list-group-item">Advancement:
-                                                <div id="chart_' . $index . '" style="width: 100%; height: 10vw;"></div>
-                                            </li>
+                                            <li class="list-group-item">Created on: ' . htmlspecialchars($project['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
                                         </ul>
                                         <div class="card-body">
-                                            <a href="task-details.php?id=' . urlencode($task['id']) . '" class="card-link">View Details</a>
-                                            <a href="edit-task.php?id=' . urlencode($task['id']) . '" class="card-link">Edit Task</a>
+                                            <a href="project-details.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
+                                            <a href="edit-project.php?id=' . urlencode($project['id']) . '" class="card-link">Edit Project</a>
                                         </div>
                                     </div>
                                 </div>';
-
-                                ?>
-                                    <script type="text/javascript">
-                                        function drawCharts() {
-                                            // Loop through the charts to redraw them dynamically
-                                            <?php foreach ($tasks as $index => $task): ?>
-                                                (function () {
-                                                    var container = document.getElementById("chart_<?= $index ?>");
-                                                    var width = container.getBoundingClientRect().width;
-                                                    var height = Math.min(container.getBoundingClientRect().height, width * 0.6); // Maintain aspect ratio
-
-                                                    var data = google.visualization.arrayToDataTable([
-                                                        ["Effort", "Amount"],
-                                                        ["Completed", <?= $task['advancement_perc'] ?>],
-                                                        ["Remaining", <?= 100 - $task['advancement_perc'] ?>]
-                                                    ]);
-
-                                                    var options = {
-                                                        pieHole: 0.5,
-                                                        pieSliceTextStyle: { color: "black" },
-                                                        legend: "none",
-                                                        width: width,
-                                                        height: height
-                                                    };
-
-                                                    var chart = new google.visualization.PieChart(container);
-                                                    chart.draw(data, options);
-                                                })();
-                                            <?php endforeach; ?>
-                                        }
-
-                                        google.charts.setOnLoadCallback(drawCharts);
-
-                                        window.addEventListener("resize", drawCharts);
-                                    </script>
-                                <?php
                             }
-                        }
+                        }                        
                         ?>
                     </div>
                     <div class="row mb-2">
-                        Your next tasks:
+                        Projects you are a part of:
                     </div>
-                    <div class="row">
-                        <?php
-                        // Fetch tasks sorted by closest due date
-                        $stmt = $conn->prepare("SELECT t.*, ut.advancement_perc, p.title AS project_title
-                                                FROM tm1_tasks t
-                                                JOIN tm1_user_task ut ON t.id = ut.id_task
-                                                LEFT JOIN tm1_projects p ON t.id_project = p.id
-                                                WHERE ut.id_user = :id_user
-                                                ORDER BY t.date_completion ASC
-                                                LIMIT 4");
-                        $stmt->bindParam(':id_user', $username);
+                    <div class="row mb-2">
+                    <?php
+                        $query = "SELECT 
+                                    p.id, 
+                                    p.title, 
+                                    p.description, 
+                                    p.date_creation, 
+                                    p.id_creator, 
+                                    r.role_name
+                                    FROM 
+                                    tm1_projects p
+                                    JOIN 
+                                    tm1_user_project up ON p.id = up.id_project
+                                    JOIN 
+                                    tm1_roles r ON up.id_role = r.id
+                                    JOIN 
+                                    tm1_users u ON up.id_user = u.username
+                                    WHERE 
+                                    u.username = :username";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bindParam(':username', $username);
                         $stmt->execute();
-                        $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                        $projects_part_of = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-                        if (empty($tasks)) {
-                            echo "<p>No tasks found.</p>";
+            
+                        if (empty($projects_part_of)) {
+                            echo "<p>No projects found.</p>";
                         } else {
-                            // Loop through tasks to create cards
-                            foreach ($tasks as $task) {
+                            foreach ($projects_part_of as $project) {
                                 echo '
                                 <div class="col-md-3 d-flex mb-2">
                                     <div class="card flex-fill" style="width: 100%;">
                                         <div class="card-body">
-                                            <h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8') . '</h5>
-                                            <p class="card-text">' . htmlspecialchars($task['description'], ENT_QUOTES, 'UTF-8') . '</p>
-                                            <p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>
+                                            <h5 class="card-title">' . htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8') . '</h5>
+                                            <p class="card-text">' . htmlspecialchars($project['description'], ENT_QUOTES, 'UTF-8') . '</p>
                                         </div>
                                         <ul class="list-group list-group-flush">
-                                            <li class="list-group-item">Priority: ' . htmlspecialchars($task['priority_level'], ENT_QUOTES, 'UTF-8') . '</li>
-                                            <li class="list-group-item">Created on: ' . htmlspecialchars($task['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
-                                            <li class="list-group-item">Due Date: ' . htmlspecialchars($task['date_completion'], ENT_QUOTES, 'UTF-8') . '</li>
-                                            <li class="list-group-item">Advancement: ' . htmlspecialchars($task['advancement_perc'], ENT_QUOTES, 'UTF-8') . '%</li>
+                                            <li class="list-group-item">Created on: ' . htmlspecialchars($project['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
+                                            <li class="list-group-item">Creator ID: ' . htmlspecialchars($project['id_creator'], ENT_QUOTES, 'UTF-8') . '</li>
+                                            <li class="list-group-item">Role: ' . htmlspecialchars($project['role_name'], ENT_QUOTES, 'UTF-8') . '</li>
                                         </ul>
                                         <div class="card-body">
-                                            <a href="task-details.php?id=' . urlencode($task['id']) . '" class="card-link">View Details</a>
-                                            <a href="edit-task.php?id=' . urlencode($task['id']) . '" class="card-link">Edit Task</a>
+                                            <a href="project-details.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
+                                            <a href="edit-project.php?id=' . urlencode($project['id']) . '" class="card-link">Edit Project</a>
                                         </div>
                                     </div>
                                 </div>';
-                            } 
+                            }
                         }
+                        
                         ?>
                     </div>
                 </div>
