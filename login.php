@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <nav>
         <div class="container-fluid d-flex justify-content-center" style="background-color: coral;">
-            <a class="navbar-brand" href="#">
+            <a class="navbar-brand">
                 <img src="img/tanger_no_bg.png" alt="Logo" width="120vw" class="d-inline-block align-text-top">
             </a>
         </div>
@@ -78,13 +78,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div data-mdb-input-init class="form-outline mb-4">
                 <input type="password" name="password" id="password" class="form-control" required />
                 <label class="form-label" for="password">Password</label>
-            </div>
-
-            <!-- Remember me -->
-            <div class="mb-4 d-flex justify-content-center">
-                <div>
-                    <a href="#">Forgot password?</a>
-                </div>
             </div>
 
             <!-- Submit button -->

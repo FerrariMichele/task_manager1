@@ -34,7 +34,7 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tanger - Dashboard</title>
+    <title>Tanger - Tasks</title>
     <link rel="icon" type="image/x-icon" href="img/tanger_favi.png">
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <script type="text/javascript">
@@ -149,14 +149,13 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                     </div>
                     <div class="row mb-2">
                         <?php
-                        // Fetch tasks sorted by advancement percentage in descending order
+                        // Fetch tasks sorted by closest due date
                         $stmt = $conn->prepare("SELECT t.*, ut.advancement_perc, p.title AS project_title
                                                 FROM tm1_tasks t
                                                 JOIN tm1_user_task ut ON t.id = ut.id_task
                                                 LEFT JOIN tm1_projects p ON t.id_project = p.id
                                                 WHERE ut.id_user = :id_user
-                                                ORDER BY ut.advancement_perc DESC
-                                                LIMIT 4");
+                                                ORDER BY t.date_completion");
                         $stmt->bindParam(':id_user', $username);
                         $stmt->execute();
                         $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -166,16 +165,17 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                             echo '
                             <div class="col-md-3 d-flex mb-2">
                                 <div class="card flex-fill" style="width: 100%;">
+                                    <div id="chart_' . $index . '" style="width: 100%; height: 10vw;"></div>
                                     <div class="card-body">
                                         <h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8') . '</h5>
+                                        <p class="card-text">' . htmlspecialchars($task['description'], ENT_QUOTES, 'UTF-8') . '</p>
                                         <p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>
                                     </div>
                                     <ul class="list-group list-group-flush">
                                         <li class="list-group-item">Priority: ' . htmlspecialchars($task['priority_level'], ENT_QUOTES, 'UTF-8') . '</li>
+                                        <li class="list-group-item">Created on: ' . htmlspecialchars($task['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
                                         <li class="list-group-item">Due Date: ' . htmlspecialchars($task['date_completion'], ENT_QUOTES, 'UTF-8') . '</li>
-                                        <li class="list-group-item">Advancement:
-                                            <div id="chart_' . $index . '" style="width: 100%; height: 10vw;"></div>
-                                        </li>
+                                        <li class="list-group-item">Advancement: ' . htmlspecialchars($task['advancement_perc'], ENT_QUOTES, 'UTF-8') . '%</li>
                                     </ul>
                                     <div class="card-body">
                                         <a href="task-details.php?id=' . urlencode($task['id']) . '" class="card-link">View Details</a>
@@ -222,48 +222,7 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                         }
                         ?>
                     </div>
-                    <div class="row mb-2">
-                        Your next tasks:
-                    </div>
-                    <div class="row">
-                        <?php
-                        // Fetch tasks sorted by closest due date
-                        $stmt = $conn->prepare("SELECT t.*, ut.advancement_perc, p.title AS project_title
-                                                FROM tm1_tasks t
-                                                JOIN tm1_user_task ut ON t.id = ut.id_task
-                                                LEFT JOIN tm1_projects p ON t.id_project = p.id
-                                                WHERE ut.id_user = :id_user
-                                                ORDER BY t.date_completion ASC
-                                                LIMIT 4");
-                        $stmt->bindParam(':id_user', $username);
-                        $stmt->execute();
-                        $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-                        // Loop through tasks to create cards
-                        foreach ($tasks as $task) {
-                            echo '
-                            <div class="col-md-3 d-flex mb-2">
-                                <div class="card flex-fill" style="width: 100%;">
-                                    <div class="card-body">
-                                        <h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8') . '</h5>
-                                        <p class="card-text">' . htmlspecialchars($task['description'], ENT_QUOTES, 'UTF-8') . '</p>
-                                        <p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>
-                                    </div>
-                                    <ul class="list-group list-group-flush">
-                                        <li class="list-group-item">Priority: ' . htmlspecialchars($task['priority_level'], ENT_QUOTES, 'UTF-8') . '</li>
-                                        <li class="list-group-item">Created on: ' . htmlspecialchars($task['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
-                                        <li class="list-group-item">Due Date: ' . htmlspecialchars($task['date_completion'], ENT_QUOTES, 'UTF-8') . '</li>
-                                        <li class="list-group-item">Advancement: ' . htmlspecialchars($task['advancement_perc'], ENT_QUOTES, 'UTF-8') . '%</li>
-                                    </ul>
-                                    <div class="card-body">
-                                        <a href="task-details.php?id=' . urlencode($task['id']) . '" class="card-link">View Details</a>
-                                        <a href="edit-task.php?id=' . urlencode($task['id']) . '" class="card-link">Edit Task</a>
-                                    </div>
-                                </div>
-                            </div>';
-                        } 
-                        ?>
-                    </div>
+                    
                 </div>
             </div>
         </div>
