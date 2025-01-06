@@ -178,8 +178,7 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                                             <li class="list-group-item">Created on: ' . htmlspecialchars($project['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
                                         </ul>
                                         <div class="card-body">
-                                            <a href="project-details.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
-                                            <a href="edit-project.php?id=' . urlencode($project['id']) . '" class="card-link">Edit Project</a>
+                                            <a href="proj.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
                                         </div>
                                     </div>
                                 </div>';
@@ -232,8 +231,11 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                                             <li class="list-group-item">Role: ' . htmlspecialchars($project['role_name'], ENT_QUOTES, 'UTF-8') . '</li>
                                         </ul>
                                         <div class="card-body">
-                                            <a href="project-details.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
-                                            <a href="edit-project.php?id=' . urlencode($project['id']) . '" class="card-link">Edit Project</a>
+                                            <a href="proj.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>';
+                                            if ($project['role_name'] !== 'creator') {
+                                                echo '<a href="leaveproj.php?id=' . urlencode($project['id']) . '" class="card-link">Leave Project</a>';
+                                            }
+                                            echo '
                                         </div>
                                     </div>
                                 </div>';
