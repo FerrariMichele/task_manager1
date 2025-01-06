@@ -10,13 +10,6 @@ if (!isset($_SESSION['username'])) {
     exit();
 }
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['logout'])) {
-    session_unset();
-    session_destroy();
-    header("Location: login.php");
-    exit();
-}
-
 $username = htmlspecialchars($_SESSION['username']);
 
 // Fetch profile picture
@@ -31,10 +24,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_project'])) {
     $title = htmlspecialchars($_POST['title']);
     $description = htmlspecialchars($_POST['description']);
     $date_creation = date('Y-m-d');
-    $id_creator = $username; // Username dalla sessione
-    
+    $id_creator = $username; // Username from session
+
     try {
-        // Inserisci il progetto nella tabella tm1_projects
+        // Insert project into tm1_projects table
         $query = "INSERT INTO tm1_projects (title, description, date_creation, id_creator) 
                   VALUES (:title, :description, :date_creation, :id_creator)";
         $stmt = $conn->prepare($query);
@@ -43,11 +36,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_project'])) {
         $stmt->bindValue(':date_creation', $date_creation);
         $stmt->bindValue(':id_creator', $id_creator);
         $stmt->execute();
-        
-        // Recupera l'ID del progetto appena creato
+
+        // Get the ID of the newly created project
         $project_id = $conn->lastInsertId();
 
-        // Inserisci nella tabella tm1_user_project con ruolo di creator (id_role = 1)
+        // Insert into tm1_user_project with creator role (id_role = 1)
         $query = "INSERT INTO tm1_user_project (id_user, id_project, id_role) 
                   VALUES (:id_user, :id_project, :id_role)";
         $stmt = $conn->prepare($query);
@@ -55,11 +48,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_project'])) {
         $stmt->bindValue(':id_project', $project_id);
         $stmt->bindValue(':id_role', 1); // Creator
         $stmt->execute();
-        echo "<script>alert('Project created successfully!');</script>";
+
+        // Redirect to avoid form resubmission
+        header("Location: newproj.php?status=success");
+        exit();
+
     } catch (PDOException $e) {
-        echo "<script>alert(Error: " . htmlspecialchars($e->getMessage()) . ");</script>";
+        // Redirect with error status
+        header("Location: newproj.php?status=error");
+        exit();
     }
 }
+
+$status = $_GET['status'] ?? '';
 ?>
 
 <!doctype html>
@@ -180,17 +181,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_project'])) {
                             <div class="row g-3">
 
                                 <!-- Project Title -->
-                                <div class="col-md-6">
+                                <div class="col-md-12">
                                     <div class="form-outline">
-                                        <input type="text" name="title" id="title" class="form-control" required />
+                                        <input type="text" name="title" id="title" class="form-control" maxlength="50" placeholder="Title - Max. 50 Characters" required />
                                         <label class="form-label" for="title">Project Title</label>
                                     </div>
                                 </div>
 
                                 <!-- Project Description -->
-                                <div class="col-md-6">
+                                <div class="col-md-12">
                                     <div class="form-outline">
-                                        <textarea name="description" id="description" class="form-control" rows="3" required></textarea>
+                                        <textarea name="description" id="description" class="form-control" rows="3" maxlength="256" placeholder="Description - Max. 256 Characters" required></textarea>
                                         <label class="form-label" for="description">Project Description</label>
                                     </div>
                                 </div>
@@ -207,6 +208,44 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_project'])) {
             </div>
         </div>
     </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container top-0 end-0 p-3">
+        <div class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true" id="successToast" data-bs-autohide="false">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <strong class="me-auto">Success!</strong>
+                    Project created successfully!
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+
+        <div class="toast align-items-center text-bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true" id="errorToast" data-bs-autohide="false">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <strong class="me-auto">Error!</strong>
+                    An error occurred while creating the project.
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var status = "<?= $status ?>";
+            if (status === "success") {
+                var toastEl = document.getElementById('successToast');
+                var toast = new bootstrap.Toast(toastEl);
+                toast.show();
+            } else if (status === "error") {
+                var toastEl = document.getElementById('errorToast');
+                var toast = new bootstrap.Toast(toastEl);
+                toast.show();
+            }
+        });
+    </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 </body>
