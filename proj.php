@@ -360,7 +360,7 @@
                                     <?php
                                     // Fetch project details and associated users/roles
                                     $query = 'SELECT p.id, p.title, p.description, p.date_creation, p.id_creator, 
-                                                    r.role_name, u.username
+                                                    r.role_name, u.username, u.pfp_image_url
                                             FROM tm1_projects p
                                             JOIN tm1_user_project up ON p.id = up.id_project
                                             JOIN tm1_roles r ON up.id_role = r.id
@@ -376,7 +376,8 @@
                                     } else {
                                         echo '<ul class="list-group mb-3">';
                                         foreach ($projectDetails as $row) {
-                                            echo '<li class="list-group-item d-flex justify-content-between align-items-center"><div>';
+                                            echo '<li class="list-group-item d-flex justify-content-between align-items-center"><div>';                                            
+                                            echo '<img src="uploads/'. htmlspecialchars($row['pfp_image_url']).'" alt="Profile Picture" width="40" height="40" class="rounded-circle">';
                                             echo htmlspecialchars($row['username'], ENT_QUOTES, 'UTF-8');
                                             echo '<span>    </span><span class="badge bg-primary rounded-pill">' . htmlspecialchars($row['role_name'], ENT_QUOTES, 'UTF-8') . '</span></div>';
                                             if ($username == $project['id_creator'] && $row['username'] !== $project['id_creator']) {
