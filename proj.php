@@ -377,7 +377,7 @@
                                         echo '<ul class="list-group mb-3">';
                                         foreach ($projectDetails as $row) {
                                             echo '<li class="list-group-item d-flex justify-content-between align-items-center"><div>';                                            
-                                            echo '<img src="uploads/'. htmlspecialchars($row['pfp_image_url']).'" alt="Profile Picture" width="40" height="40" class="rounded-circle">';
+                                            echo '<img src="uploads/'. htmlspecialchars($row['pfp_image_url']).'" alt="Profile Picture" width="40" height="40" class="rounded-circle"><span>    </span>';
                                             echo htmlspecialchars($row['username'], ENT_QUOTES, 'UTF-8');
                                             echo '<span>    </span><span class="badge bg-primary rounded-pill">' . htmlspecialchars($row['role_name'], ENT_QUOTES, 'UTF-8') . '</span></div>';
                                             if ($username == $project['id_creator'] && $row['username'] !== $project['id_creator']) {
