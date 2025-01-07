@@ -12,6 +12,13 @@ if (!isset($_SESSION['username'])) {
 
 $username = htmlspecialchars($_SESSION['username']);
 
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['logout'])) {
+    session_unset();
+    session_destroy();
+    header("Location: login.php");
+    exit();
+}
+
 // Fetch profile picture
 $query = "SELECT pfp_image_url FROM tm1_users WHERE username = :username";
 $stmt = $conn->prepare($query);
