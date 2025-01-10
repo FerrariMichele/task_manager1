@@ -1,38 +1,55 @@
 <?php
-if (!isset($conn) || $conn == null) {
-    require 'conf.php';
-}
+    if (!isset($conn) || $conn == null) {
+        require 'conf.php';
+    }
 
-session_start();
+    session_start();
 
-if (!isset($_SESSION['username'])) {
-    header("Location: login.php");
-    exit();
-}
+    if (!isset($_SESSION['username'])) {
+        header("Location: login.php");
+        exit();
+    }
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['logout'])) {
-    session_unset();
-    session_destroy();
-    header("Location: login.php");
-    exit();
-}
+    if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['logout'])) {
+        session_unset();
+        session_destroy();
+        header("Location: login.php");
+        exit();
+    }
 
-$username = htmlspecialchars($_SESSION['username']);
+    $username = htmlspecialchars($_SESSION['username']);
 
-// Fetch profile picture
-$query = "SELECT pfp_image_url FROM tm1_users WHERE username = :username";
-$stmt = $conn->prepare($query);
-$stmt->bindValue(":username", $username);
-$stmt->execute();
-$row = $stmt->fetch(PDO::FETCH_ASSOC);
-$profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profile picture
+    // Unified query to fetch all projects
+    $query = "
+    SELECT DISTINCT 
+        p.id, 
+        p.title, 
+        p.description, 
+        p.date_creation, 
+        p.id_creator, 
+        COALESCE(r.role_name, 'creator') AS role_name,
+        (CASE WHEN p.id_creator = :username THEN 'creator' ELSE 'participant' END) AS user_role
+    FROM 
+        tm1_projects p
+    LEFT JOIN 
+        tm1_user_project up ON p.id = up.id_project
+    LEFT JOIN 
+        tm1_roles r ON up.id_role = r.id
+    LEFT JOIN 
+        tm1_users u ON up.id_user = u.username
+    WHERE 
+        p.id_creator = :username OR u.username = :username";
+
+    $stmt = $conn->prepare($query);
+    $stmt->bindParam(':username', $username);
+    $stmt->execute();
+    $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!doctype html>
 <html lang="en">
-
 <head>
-    <meta charset="utf-8">
+<meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tanger - Projects</title>
     <link rel="icon" type="image/x-icon" href="img/tanger_favi.png">
@@ -77,10 +94,10 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
         }
     </style>
 </head>
-
 <body>
     <div class="container-fluid">
         <div class="row g-0">
+
             <!-- Sidebar -->
             <div class="col-auto sidebar">
                 <div class="d-flex flex-column align-items-center align-items-sm-start px-3 pt-2 text-black min-vh-100">
@@ -138,86 +155,22 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                 </div>
             </div>
 
-            <!-- Main Content -->
             <div class="col content">
                 <div class="container-fluid px-0">
                     <div class="row mb-2 text-center">
                         <strong><?= date("l, F j, Y") ?></strong>
                     </div>
-                    <div class="row mb-2">
-                        Your projects:
-                    </div>
-                    <div class="row mb-2">
-                    <?php
-                        // Fetch projects linked to the user along with roles
-                        $query = "SELECT 
-                                    id, 
-                                    title, 
-                                    description, 
-                                    date_creation
-                                FROM 
-                                    tm1_projects
-                                WHERE 
-                                    id_creator = :username";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bindParam(':username', $username);
-                        $stmt->execute();
-                        $projects_created = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                        if (empty($projects_created)) {
-                            echo "<p>No projects found.</p>";
-                        } else {
-                            foreach ($projects_created as $project) {
-                                echo '
-                                <div class="col-md-3 d-flex mb-2">
-                                    <div class="card flex-fill" style="width: 100%;">
-                                        <div class="card-body">
-                                            <h5 class="card-title">' . htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8') . '</h5>
-                                            <p class="card-text">' . htmlspecialchars($project['description'], ENT_QUOTES, 'UTF-8') . '</p>
-                                        </div>
-                                        <ul class="list-group list-group-flush">
-                                            <li class="list-group-item">Created on: ' . htmlspecialchars($project['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
-                                        </ul>
-                                        <div class="card-body">
-                                            <a href="proj.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
-                                        </div>
-                                    </div>
-                                </div>';
-                            }
-                        }                        
-                        ?>
-                    </div>
-                    <div class="row mb-2">
-                        Projects you are a part of:
-                    </div>
-                    <div class="row mb-2">
-                    <?php
-                        $query = "SELECT 
-                                    p.id, 
-                                    p.title, 
-                                    p.description, 
-                                    p.date_creation, 
-                                    p.id_creator, 
-                                    r.role_name
-                                    FROM 
-                                    tm1_projects p
-                                    JOIN 
-                                    tm1_user_project up ON p.id = up.id_project
-                                    JOIN 
-                                    tm1_roles r ON up.id_role = r.id
-                                    JOIN 
-                                    tm1_users u ON up.id_user = u.username
-                                    WHERE 
-                                    u.username = :username";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bindParam(':username', $username);
-                        $stmt->execute();
-                        $projects_part_of = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            
-                        if (empty($projects_part_of)) {
-                            echo "<p>No projects found.</p>";
-                        } else {
-                            foreach ($projects_part_of as $project) {
+                    <!-- Section for "Your Projects" -->
+                    <div class="row mb-2">
+                        <p>Your Projects:</p>
+                    </div>
+                    <div class="row mb-2">
+                        <?php
+                        $displayedProjects = [];
+                        foreach ($projects as $project) {
+                            if ($project['user_role'] === 'creator' && !in_array($project['id'], $displayedProjects)) {
+                                $displayedProjects[] = $project['id'];
                                 echo '
                                 <div class="col-md-3 d-flex mb-2">
                                     <div class="card flex-fill" style="width: 100%;">
@@ -231,25 +184,53 @@ $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profil
                                             <li class="list-group-item">Role: ' . htmlspecialchars($project['role_name'], ENT_QUOTES, 'UTF-8') . '</li>
                                         </ul>
                                         <div class="card-body">
-                                            <a href="proj.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>';
-                                            if ($project['role_name'] !== 'creator') {
-                                                echo '<a href="leaveproj.php?id=' . urlencode($project['id']) . '" class="card-link">Leave Project</a>';
-                                            }
-                                            echo '
+                                            <a href="proj.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
                                         </div>
                                     </div>
                                 </div>';
                             }
                         }
-                        
+                        if (empty($displayedProjects)) {
+                            echo "<p>No projects found.</p>";
+                        }
+                        ?>
+                    </div>
+
+                    <!-- Section for "Projects You Are Part Of" -->
+                    <div class="row mb-2">
+                        <p>Projects You Are Part Of:</p>
+                    </div>
+                    <div class="row mb-2">
+                        <?php
+                        foreach ($projects as $project) {
+                            if ($project['user_role'] === 'participant' && !in_array($project['id'], $displayedProjects)) {
+                                $displayedProjects[] = $project['id'];
+                                echo '
+                                <div class="col-md-3 d-flex mb-2">
+                                    <div class="card flex-fill" style="width: 100%;">
+                                        <div class="card-body">
+                                            <h5 class="card-title">' . htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8') . '</h5>
+                                            <p class="card-text">' . htmlspecialchars($project['description'], ENT_QUOTES, 'UTF-8') . '</p>
+                                        </div>
+                                        <ul class="list-group list-group-flush">
+                                            <li class="list-group-item">Created on: ' . htmlspecialchars($project['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>
+                                            <li class="list-group-item">Creator ID: ' . htmlspecialchars($project['id_creator'], ENT_QUOTES, 'UTF-8') . '</li>
+                                            <li class="list-group-item">Role: ' . htmlspecialchars($project['role_name'], ENT_QUOTES, 'UTF-8') . '</li>
+                                        </ul>
+                                        <div class="card-body">
+                                            <a href="proj.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
+                                            <a href="leaveproj.php?id=' . urlencode($project['id']) . '" class="card-link">Leave Project</a>
+                                        </div>
+                                    </div>
+                                </div>';
+                            }
+                        }
                         ?>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 </body>
-
 </html>

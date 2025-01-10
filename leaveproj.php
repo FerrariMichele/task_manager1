@@ -1,69 +1,69 @@
 <?php
-if (!isset($conn) || $conn == null) {
-    require 'conf.php';
-}
-
-session_start();
-
-if (!isset($_SESSION['username'])) {
-    header("Location: login.php");
-    exit();
-}
-
-$username = $_SESSION["username"];
-
-// Validate project ID
-$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-if (!$id) {
-    header("Location: errorpage.php");
-    exit();
-}
-
-try {
-    $result = deleteUserProjectLink($conn, $username, $id);
-    if ($result) {
-        $message = 'You left the project';
-    } else {
-        $message = 'Unable to leave the project. Try again later.';
+    if (!isset($conn) || $conn == null) {
+        require 'conf.php';
     }
-} catch (Exception $e) {
-    echo "Error: " . $e->getMessage();
-}
 
+    session_start();
 
-function deleteUserProjectLink($conn, $username, $projectId) {
+    if (!isset($_SESSION['username'])) {
+        header("Location: login.php");
+        exit();
+    }
+
+    $username = $_SESSION["username"];
+
     // Validate project ID
-    if (!is_int($projectId) || $projectId <= 0) {
-        throw new InvalidArgumentException("Invalid project ID.");
+    $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+    if (!$id) {
+        header("Location: errorpage.php");
+        exit();
     }
 
-    // Prepare the SQL query
-    $query = "DELETE FROM tm1_user_project 
-              WHERE id_user = :username
-              AND id_project = :projectId";
+    try {
+        $result = deleteUserProjectLink($conn, $username, $id);
+        if ($result) {
+            $message = 'You left the project';
+        } else {
+            $message = 'Unable to leave the project. Try again later.';
+        }
+    } catch (Exception $e) {
+        echo "Error: " . $e->getMessage();
+    }
 
-    // Use prepared statements to avoid SQL injection
-    $stmt = $conn->prepare($query);
 
-    if ($stmt) {
-        // Bind the parameters
-        $stmt->bindValue(':username', $username, PDO::PARAM_STR);
-        $stmt->bindValue(':projectId', $projectId, PDO::PARAM_INT);
+    function deleteUserProjectLink($conn, $username, $projectId) {
+        // Validate project ID
+        if (!is_int($projectId) || $projectId <= 0) {
+            throw new InvalidArgumentException("Invalid project ID.");
+        }
 
-        // Execute the query
-        if ($stmt->execute()) {
-            if ($stmt->rowCount() > 0) {
-                return true; // Row deleted successfully
+        // Prepare the SQL query
+        $query = "DELETE FROM tm1_user_project 
+                WHERE id_user = :username
+                AND id_project = :projectId";
+
+        // Use prepared statements to avoid SQL injection
+        $stmt = $conn->prepare($query);
+
+        if ($stmt) {
+            // Bind the parameters
+            $stmt->bindValue(':username', $username, PDO::PARAM_STR);
+            $stmt->bindValue(':projectId', $projectId, PDO::PARAM_INT);
+
+            // Execute the query
+            if ($stmt->execute()) {
+                if ($stmt->rowCount() > 0) {
+                    return true; // Row deleted successfully
+                } else {
+                    return false; // No rows matched
+                }
             } else {
-                return false; // No rows matched
+                throw new Exception("Execution failed: " . implode(", ", $stmt->errorInfo()));
             }
         } else {
-            throw new Exception("Execution failed: " . implode(", ", $stmt->errorInfo()));
+            throw new Exception("Statement preparation failed: " . implode(", ", $conn->errorInfo()));
         }
-    } else {
-        throw new Exception("Statement preparation failed: " . implode(", ", $conn->errorInfo()));
     }
-}
 ?>
 
 <!doctype html>

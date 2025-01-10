@@ -1,86 +1,145 @@
 <?php
-  if (!isset($conn) || $conn == null) {
-      require 'conf.php';
-  }
+    if (!isset($conn) || $conn == null) {
+        require 'conf.php';
+    }
 
-  session_start();
-  if (isset($_SESSION['username'])) {
-      header("Location: index.php");
-      exit();
-  }
+    session_start();
+    if (isset($_SESSION['username'])) {
+        header("Location: index.php");
+        exit();
+    }
 
-  if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-      require 'conf.php';
+    if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+        require 'conf.php';
 
-      $username = $_POST['username'];
-      
-      $email = $_POST['email'];
-      $password = $_POST['password'];
-      $passwordConf = $_POST['passwordConf'];
-      $dob = $_POST['dob'];
-      $name = $_POST['name'];
-      $surname = $_POST['surname'];
+        $username = $_POST['username'];
+        
+        $email = $_POST['email'];
+        $password = $_POST['password'];
+        $passwordConf = $_POST['passwordConf'];
+        $dob = $_POST['dob'];
+        $name = $_POST['name'];
+        $surname = $_POST['surname'];
 
-      // Default profile picture
-      $profilePicture = 'nopfp.png'; 
+        // Default profile picture
+        $profilePicture = 'nopfp.png'; 
 
-      // Handle profile picture upload
-      if (isset($_FILES['profilePicture']) && $_FILES['profilePicture']['error'] === UPLOAD_ERR_OK) {
-          $targetDir = "uploads/";
+        // Handle profile picture upload
+        if (isset($_FILES['profilePicture']) && $_FILES['profilePicture']['error'] === UPLOAD_ERR_OK) {
+            $targetDir = "uploads/";
 
-          // Get file extension
-          $fileInfo = pathinfo($_FILES["profilePicture"]["name"]);
-          $extension = strtolower($fileInfo['extension']); // Ensure the extension is lowercase
+            // Get file extension
+            $fileInfo = pathinfo($_FILES["profilePicture"]["name"]);
+            $extension = strtolower($fileInfo['extension']); // Ensure the extension is lowercase
 
-          // Set the new file name as username.extension
-          $timestamp = time();
-          $profilePicture = $username . "_$timestamp." . $extension;
-          $targetFilePath = $targetDir . $profilePicture;
+            // Set the new file name as username.extension
+            $timestamp = time();
+            $profilePicture = $username . "_$timestamp." . $extension;
+            $targetFilePath = $targetDir . $profilePicture;
 
-      }
+        }
 
-      // Check if passwords match
-      if ($password != $passwordConf) {
-          echo "<script>alert('Passwords do not match!');</script>";
-      } else {
-          // Check if username or email already exists
-          $stmt = $conn->prepare("SELECT * FROM tm1_users WHERE username = :username OR email = :email");
-          $stmt->bindParam(':username', $username);
-          $stmt->bindParam(':email', $email);
-          $stmt->execute();
+        // Check if passwords match
+        if ($password != $passwordConf) {
+            showToast("Passwords do not match!", 'danger');
 
-          if ($stmt->rowCount() > 0) {
-              echo "<script>alert('Username or email already in use!');</script>";
-          } else {
-              // Hash the password before saving it to the database
-              $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        } else {
+            // Check if username or email already exists
+            $stmt = $conn->prepare("SELECT * FROM tm1_users WHERE username = :username OR email = :email");
+            $stmt->bindParam(':username', $username);
+            $stmt->bindParam(':email', $email);
+            $stmt->execute();
 
-              // Insert the new user
-              $stmt = $conn->prepare("INSERT INTO tm1_users (username, email, password, date_birth, name, surname, pfp_image_url) VALUES (:username, :email, :password, :dob, :name, :surname, :profilePicture)");
-              $stmt->bindParam(':username', $username);
-              $stmt->bindParam(':email', $email);
-              $stmt->bindParam(':password', $hashedPassword);
-              $stmt->bindParam(':dob', $dob);
-              $stmt->bindParam(':name', $name);
-              $stmt->bindParam(':surname', $surname);
-              $stmt->bindParam(':profilePicture', $profilePicture);
+            if ($stmt->rowCount() > 0) {
+                if($stmt->fetch(PDO::FETCH_ASSOC)['username'] == $username) {
+                    showToast("Username already in use!", 'danger');
+                } else {
+                    showToast("Email already in use!", 'danger');
+                }
 
-              if ($stmt->execute()) {
-                    $_SESSION['username'] = $username;
-                    // Move the uploaded file to the target directory
-                    if (!move_uploaded_file($_FILES["profilePicture"]["tmp_name"], $targetFilePath)) {
-                        echo "<script>alert('Failed to upload profile picture. Using default.');</script>";
-                        $profilePicture = 'nopfp.png'; // Revert to default if upload fails
-                    }
-                    echo "<script>alert('Registration successful!');</script>";
-                    header("Location: login.php");
-                    exit();
-              } else {
-                  echo "<script>alert('Error during registration. Please try again.');</script>";
-              }
-          }
-      }
-  }
+            } else {
+                // Hash the password before saving it to the database
+                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+
+                // Insert the new user
+                $stmt = $conn->prepare("INSERT INTO tm1_users (username, email, password, date_birth, name, surname, pfp_image_url) VALUES (:username, :email, :password, :dob, :name, :surname, :profilePicture)");
+                $stmt->bindParam(':username', $username);
+                $stmt->bindParam(':email', $email);
+                $stmt->bindParam(':password', $hashedPassword);
+                $stmt->bindParam(':dob', $dob);
+                $stmt->bindParam(':name', $name);
+                $stmt->bindParam(':surname', $surname);
+                $stmt->bindParam(':profilePicture', $profilePicture);
+
+                if ($stmt->execute()) {
+                        $_SESSION['username'] = $username;
+                        // Move the uploaded file to the target directory
+                        if (!move_uploaded_file($_FILES["profilePicture"]["tmp_name"], $targetFilePath)) {
+                            showToast("Failed to upload profile picture. Using default.", 'danger');
+                            $profilePicture = 'nopfp.png'; // Revert to default if upload fails
+
+                        }
+
+                        showToast("Registration successful!", 'success');
+                        header("Location: login.php");
+                        exit();
+                        
+                } else {
+                    showToast("Error during registration. Please try again.", 'danger');
+
+                }
+            }
+        }
+    }
+
+    // Example for when registration fails or succeeds
+    if ($password != $passwordConf) {
+        showToast("Passwords do not match!", 'danger');
+    } else {
+        // Check if username or email already exists
+        $stmt = $conn->prepare("SELECT * FROM tm1_users WHERE username = :username OR email = :email");
+        $stmt->bindParam(':username', $username);
+        $stmt->bindParam(':email', $email);
+        $stmt->execute();
+
+        if ($stmt->rowCount() > 0) {
+            if($stmt->fetch(PDO::FETCH_ASSOC)['username'] == $username) {
+                showToast("Username already in use!", 'danger');
+            } else {
+                showToast("Email already in use!", 'danger');
+            }
+        } else {
+            // Insert user and hash password
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $conn->prepare("INSERT INTO tm1_users (username, email, password, date_birth, name, surname, pfp_image_url) VALUES (:username, :email, :password, :dob, :name, :surname, :profilePicture)");
+            $stmt->bindParam(':username', $username);
+            $stmt->bindParam(':email', $email);
+            $stmt->bindParam(':password', $hashedPassword);
+            $stmt->bindParam(':dob', $dob);
+            $stmt->bindParam(':name', $name);
+            $stmt->bindParam(':surname', $surname);
+            $stmt->bindParam(':profilePicture', $profilePicture);
+
+            if ($stmt->execute()) {
+                $_SESSION['username'] = $username;
+                // Handle file upload
+                if (!move_uploaded_file($_FILES["profilePicture"]["tmp_name"], $targetFilePath)) {
+                    showToast('Failed to upload profile picture. Using default.', 'warning');
+                    $profilePicture = 'nopfp.png'; // Revert to default if upload fails
+                }
+                showToast("Registration successful!", 'success');
+                header("Location: login.php");
+                exit();
+            } else {
+                showToast("Error during registration. Please try again.", 'danger');
+            }
+        }
+    }
+
+    function showToast($message, $type = 'success') {
+        // Use session to carry the toast messages to the front end
+        $_SESSION['toast_message'] = ['message' => $message, 'type' => $type];
+    }
 ?>
 
 <!doctype html>
@@ -187,6 +246,47 @@
             </div>
       	</form>
     </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Check if there's a toast message stored in the session
+            <?php if (isset($_SESSION['toast_message'])): ?>
+                const toastMessage = <?php echo json_encode($_SESSION['toast_message']); ?>;
+                
+                // Create the toast element
+                let toastHTML = `
+                    <div class="toast align-items-center text-bg-${toastMessage.type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                ${toastMessage.message}
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                    </div>
+                `;
+                
+                // Add toast to the container
+                document.getElementById('toast-container').innerHTML += toastHTML;
+
+                // Initialize and show the toast
+                let toast = new bootstrap.Toast(document.querySelector('.toast:last-child'));
+                toast.show();
+
+                setTimeout(() => {
+                    toast.hide();  // Close the toast programmatically
+                }, 7000);
+
+                // Clear the session toast message after showing
+                <?php unset($_SESSION['toast_message']); ?>
+            <?php endif; ?>
+        });
+    </script>
+
+
+    <div id="toast-container" class="position-fixed bottom-0 end-0 p-3">
+    <!-- Toast messages will be added here dynamically -->
+    </div>
+
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 </body>

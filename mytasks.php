@@ -1,31 +1,31 @@
 <?php
-if (!isset($conn) || $conn == null) {
-    require 'conf.php';
-}
+    if (!isset($conn) || $conn == null) {
+        require 'conf.php';
+    }
 
-session_start();
+    session_start();
 
-if (!isset($_SESSION['username'])) {
-    header("Location: login.php");
-    exit();
-}
+    if (!isset($_SESSION['username'])) {
+        header("Location: login.php");
+        exit();
+    }
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['logout'])) {
-    session_unset();
-    session_destroy();
-    header("Location: login.php");
-    exit();
-}
+    if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['logout'])) {
+        session_unset();
+        session_destroy();
+        header("Location: login.php");
+        exit();
+    }
 
-$username = htmlspecialchars($_SESSION['username']);
+    $username = htmlspecialchars($_SESSION['username']);
 
-// Fetch profile picture
-$query = "SELECT pfp_image_url FROM tm1_users WHERE username = :username";
-$stmt = $conn->prepare($query);
-$stmt->bindValue(":username", $username);
-$stmt->execute();
-$row = $stmt->fetch(PDO::FETCH_ASSOC);
-$profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profile picture
+    // Fetch profile picture
+    $query = "SELECT pfp_image_url FROM tm1_users WHERE username = :username";
+    $stmt = $conn->prepare($query);
+    $stmt->bindValue(":username", $username);
+    $stmt->execute();
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profile picture
 ?>
 
 <!doctype html>

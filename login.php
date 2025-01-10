@@ -1,46 +1,51 @@
 <?php
-if (!isset($conn) || $conn == null) {
-    require 'conf.php';
-}
+    if (!isset($conn) || $conn == null) {
+        require 'conf.php';
+    }
 
-session_start();
-if (isset($_SESSION['username'])) {
-    header("Location: index.php");
-    exit();
-}
+    session_start();
+    if (isset($_SESSION['username'])) {
+        header("Location: index.php");
+        exit();
+    }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = $_POST['username'];
-    $password = $_POST['password'];
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $username = $_POST['username'];
+        $password = $_POST['password'];
 
-    // Validate inputs
-    if (empty($username) || empty($password)) {
-        echo "<script>alert('Please fill in both fields.');</script>";
-    } else {
-        // Check the database for the user
-        $stmt = $conn->prepare("SELECT * FROM tm1_users WHERE username = :username");
-        $stmt->bindParam(':username', $username);
-        $stmt->execute();
-
-        if ($stmt->rowCount() === 1) {
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // Verify the password
-            if (password_verify($password, $user['password'])) {
-                // Store username in session
-                $_SESSION['username'] = $user['username'];
-
-                // Redirect to the index page
-                header("Location: index.php");
-                exit();
-            } else {
-                echo "<script>alert('Incorrect username and password combination.');</script>";
-            }
+        // Validate inputs
+        if (empty($username) || empty($password)) {
+            showToast('Please fill in both fields', "alert");
         } else {
-            echo "<script>alert('Incorrect username and password combination.');</script>";
+            // Check the database for the user
+            $stmt = $conn->prepare("SELECT * FROM tm1_users WHERE username = :username");
+            $stmt->bindParam(':username', $username);
+            $stmt->execute();
+
+            if ($stmt->rowCount() === 1) {
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                // Verify the password
+                if (password_verify($password, $user['password'])) {
+                    // Store username in session
+                    $_SESSION['username'] = $user['username'];
+
+                    // Redirect to the index page
+                    header("Location: index.php");
+                    exit();
+                } else {
+                    showToast('Incorrect username and password combination.', "danger");
+                }
+            } else {
+                showToast('Incorrect username and password combination.', "danger");
+            }
         }
     }
-}
+
+    function showToast($message, $type = 'success') {
+        // Use session to carry the toast messages to the front end
+        $_SESSION['toast_message'] = ['message' => $message, 'type' => $type];
+    }
 ?>
 
 <!doctype html>
@@ -90,6 +95,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <p>Not a member? <a href="register.php">Register</a></p>
             </div>
         </form>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Check if there's a toast message stored in the session
+            <?php if (isset($_SESSION['toast_message'])): ?>
+                const toastMessage = <?php echo json_encode($_SESSION['toast_message']); ?>;
+                
+                // Create the toast element
+                let toastHTML = `
+                    <div class="toast align-items-center text-bg-${toastMessage.type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                ${toastMessage.message}
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                    </div>
+                `;
+                
+                // Add toast to the container
+                document.getElementById('toast-container').innerHTML += toastHTML;
+
+                // Initialize and show the toast
+                let toast = new bootstrap.Toast(document.querySelector('.toast:last-child'));
+                toast.show();
+
+                setTimeout(() => {
+                    toast.hide();  // Close the toast programmatically
+                }, 7000);
+
+                // Clear the session toast message after showing
+                <?php unset($_SESSION['toast_message']); ?>
+            <?php endif; ?>
+        });
+    </script>
+
+
+    <div id="toast-container" class="position-fixed bottom-0 end-0 p-3">
+    <!-- Toast messages will be added here dynamically -->
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>

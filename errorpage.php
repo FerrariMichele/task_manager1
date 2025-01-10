@@ -1,15 +1,14 @@
 <?php
-if (!isset($conn) || $conn == null) {
-    require 'conf.php';
-}
+    if (!isset($conn) || $conn == null) {
+        require 'conf.php';
+    }
 
-session_start();
+    session_start();
 
-if (!isset($_SESSION['username'])) {
-    header("Location: login.php");
-    exit();
-}
-
+    if (!isset($_SESSION['username'])) {
+        header("Location: login.php");
+        exit();
+    }
 ?>
 
 <!doctype html>

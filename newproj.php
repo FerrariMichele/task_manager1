@@ -1,73 +1,74 @@
 <?php
-if (!isset($conn) || $conn == null) {
-    require 'conf.php';
-}
+    if (!isset($conn) || $conn == null) {
+        require 'conf.php';
+    }
 
-session_start();
+    session_start();
 
-if (!isset($_SESSION['username'])) {
-    header("Location: login.php");
-    exit();
-}
-
-$username = htmlspecialchars($_SESSION['username']);
-
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['logout'])) {
-    session_unset();
-    session_destroy();
-    header("Location: login.php");
-    exit();
-}
-
-// Fetch profile picture
-$query = "SELECT pfp_image_url FROM tm1_users WHERE username = :username";
-$stmt = $conn->prepare($query);
-$stmt->bindValue(":username", $username);
-$stmt->execute();
-$row = $stmt->fetch(PDO::FETCH_ASSOC);
-$profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profile picture
-
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_project'])) {
-    $title = htmlspecialchars($_POST['title']);
-    $description = htmlspecialchars($_POST['description']);
-    $date_creation = date('Y-m-d');
-    $id_creator = $username; // Username from session
-
-    try {
-        // Insert project into tm1_projects table
-        $query = "INSERT INTO tm1_projects (title, description, date_creation, id_creator) 
-                  VALUES (:title, :description, :date_creation, :id_creator)";
-        $stmt = $conn->prepare($query);
-        $stmt->bindValue(':title', $title);
-        $stmt->bindValue(':description', $description);
-        $stmt->bindValue(':date_creation', $date_creation);
-        $stmt->bindValue(':id_creator', $id_creator);
-        $stmt->execute();
-
-        // Get the ID of the newly created project
-        $project_id = $conn->lastInsertId();
-
-        // Insert into tm1_user_project with creator role (id_role = 1)
-        $query = "INSERT INTO tm1_user_project (id_user, id_project, id_role) 
-                  VALUES (:id_user, :id_project, :id_role)";
-        $stmt = $conn->prepare($query);
-        $stmt->bindValue(':id_user', $id_creator);
-        $stmt->bindValue(':id_project', $project_id);
-        $stmt->bindValue(':id_role', 1); // Creator
-        $stmt->execute();
-
-        // Redirect to avoid form resubmission
-        header("Location: newproj.php?status=success");
-        exit();
-
-    } catch (PDOException $e) {
-        // Redirect with error status
-        header("Location: newproj.php?status=error");
+    if (!isset($_SESSION['username'])) {
+        header("Location: login.php");
         exit();
     }
-}
 
-$status = $_GET['status'] ?? '';
+    $username = htmlspecialchars($_SESSION['username']);
+
+    if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['logout'])) {
+        session_unset();
+        session_destroy();
+        header("Location: login.php");
+        exit();
+    }
+
+    // Fetch profile picture
+    $query = "SELECT pfp_image_url FROM tm1_users WHERE username = :username";
+    $stmt = $conn->prepare($query);
+    $stmt->bindValue(":username", $username);
+    $stmt->execute();
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profile picture
+
+    if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_project'])) {
+        $title = htmlspecialchars($_POST['title']);
+        $description = htmlspecialchars($_POST['description']);
+        $date_creation = date('Y-m-d');
+        $id_creator = $username; // Username from session
+
+        try {
+            // Insert project into tm1_projects table
+            $query = "INSERT INTO tm1_projects (title, description, date_creation, id_creator) 
+                    VALUES (:title, :description, :date_creation, :id_creator)";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':title', $title);
+            $stmt->bindValue(':description', $description);
+            $stmt->bindValue(':date_creation', $date_creation);
+            $stmt->bindValue(':id_creator', $id_creator);
+            $stmt->execute();
+
+            // Get the ID of the newly created project
+            $project_id = $conn->lastInsertId();
+
+            // Insert into tm1_user_project with creator role (id_role = 1)
+            $query = "INSERT INTO tm1_user_project (id_user, id_project, worker_wage_h, id_role) 
+                    VALUES (:id_user, :id_project, :worker_wage_h, :id_role)";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id_user', $id_creator);
+            $stmt->bindValue(':id_project', $project_id);
+            $stmt->bindValue(':worker_wage_h', 50.00); // Creator has programmer average wage per hour of work
+            $stmt->bindValue(':id_role', 1); // Creator
+            $stmt->execute();
+
+            // Redirect to avoid form resubmission
+            header("Location: proj.php?id=" . $project_id);
+            exit();
+
+        } catch (PDOException $e) {
+            // Redirect with error status
+            header("Location: newproj.php?status=error");
+            exit();
+        }
+    }
+
+    $status = $_GET['status'] ?? '';
 ?>
 
 <!doctype html>
@@ -217,7 +218,7 @@ $status = $_GET['status'] ?? '';
     </div>
 
     <!-- Toast Notifications -->
-    <div class="toast-container top-0 end-0 p-3">
+    <div class="toast-container bottom-0 end-0 p-3">
         <div class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true" id="successToast" data-bs-autohide="false">
             <div class="d-flex">
                 <div class="toast-body">

@@ -161,7 +161,7 @@
 
             if ($user) {
                 // Add the user to the project with a default role (e.g., viewer)
-                $query = "INSERT INTO tm1_user_project (id_project, id_user, id_role) VALUES (:project_id, :user_id, 3)";
+                $query = "INSERT INTO tm1_user_project (id_project, id_user, worker_wage_h, id_role) VALUES (:project_id, :user_id, 50.0, 3)";
                 $stmt = $conn->prepare($query);
                 $stmt->bindValue(':project_id', $id, PDO::PARAM_INT);
                 $stmt->bindValue(':user_id', $newMemberUsername, PDO::PARAM_STR);
@@ -194,6 +194,64 @@
         header("Location: proj.php?id=$id");
         exit();
     }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
+        // Get the project ID from the POST data
+        $projectId = $_POST['delete'];
+    
+        try {
+            // Start transaction to ensure all deletions are atomic
+            $conn->beginTransaction();
+    
+            // Step 1: Delete related rows from tm1_user_task (tasks associated with the project)
+            $stmt = $conn->prepare("DELETE FROM tm1_user_task WHERE id_task IN (SELECT id FROM tm1_tasks WHERE id_project = :projectId)");
+            $stmt->bindParam(':projectId', $projectId, PDO::PARAM_INT);  // Ensure the project ID is bound as an integer
+            $stmt->execute();
+    
+            // Step 2: Delete related rows from tm1_user_project (user-project associations)
+            $stmt = $conn->prepare("DELETE FROM tm1_user_project WHERE id_project = :projectId");
+            $stmt->bindParam(':projectId', $projectId, PDO::PARAM_INT);
+            $stmt->execute();
+    
+            // Step 3: Delete related rows from tm1_edits (edits associated with tasks in the project)
+            $stmt = $conn->prepare("DELETE FROM tm1_edits WHERE id_task IN (SELECT id FROM tm1_tasks WHERE id_project = :projectId)");
+            $stmt->bindParam(':projectId', $projectId, PDO::PARAM_INT);
+            $stmt->execute();
+    
+            // Step 4: Delete tasks from tm1_tasks (tasks related to the project)
+            $stmt = $conn->prepare("DELETE FROM tm1_tasks WHERE id_project = :projectId");
+            $stmt->bindParam(':projectId', $projectId, PDO::PARAM_INT);
+            $stmt->execute();
+    
+            // Step 5: Finally, delete the project from tm1_projects
+            $stmt = $conn->prepare("DELETE FROM tm1_projects WHERE id = :projectId");
+            $stmt->bindParam(':projectId', $projectId, PDO::PARAM_INT);
+            $stmt->execute();
+    
+            // Commit the transaction
+            $conn->commit();
+    
+            // Redirect to the projects page or show a success message
+            $_SESSION['toast'] = [
+                'type' => 'success',
+                'message' => 'Project deleted successfully!'
+            ];
+            header("Location: myproj.php");
+            exit();
+        } catch (Exception $e) {
+            // Rollback the transaction if any error occurs
+            $conn->rollBack();
+            // Log the error (you can log it to a file or handle as needed)
+            error_log("Error deleting project: " . $e->getMessage());
+            
+            // Provide a more informative error message
+            $_SESSION['toast'] = [
+                'type' => 'danger',
+                'message' => 'Error deleting project. Please try again. ' . $e->getMessage()
+            ];
+        }
+    }
+    
 ?>
 
 <!doctype html>
@@ -333,6 +391,7 @@
                                             </div>
                                             <button type="submit" class="btn mb-3"  style="background: rgb(248, 179, 2)">Update Project</button>
                                         </form>
+
                                     <?php else: ?>
                                         <h5 class="card-title"><?= htmlspecialchars($project['title'], ENT_QUOTES, 'UTF-8') ?></h5>
                                         <p class="card-text"><?= htmlspecialchars($project['description'], ENT_QUOTES, 'UTF-8') ?></p>
@@ -344,6 +403,13 @@
                                         if ($username !== $project['id_creator']) {
                                             echo '<p class="card-text"><strong>Project Owner: </strong>' . htmlspecialchars($project['id_creator'], ENT_QUOTES, 'UTF-8') . '</p>';
                                             echo '<a href="leaveproj.php?id=' . urlencode($project['id']) . '" class="card-link">Leave Project</a>';
+                                        }
+                                        else{
+                                            echo '
+                                            <form method="post">
+                                                <input type="hidden" name="delete" value="'. $project['id'] .'">
+                                                <button type="submit" class="btn btn-danger">Delete Project</button>
+                                            </form>';
                                         }
                                     ?>
                                 </div>
@@ -444,6 +510,11 @@
                             const toastList = toastElList.map(function (toastEl) {
                                 return new bootstrap.Toast(toastEl);
                             });
+
+                            setTimeout(() => {
+                                toast.hide();  // Close the toast programmatically
+                            }, 7000);
+
 
                             toastList.forEach(toast => toast.show());
                         });

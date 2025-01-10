@@ -1,12 +1,11 @@
 <?php
-
     if (!isset($conn) || $conn == null) {
         require 'conf.php';
     }
 
     session_start();
 
-    if (!isset($_SESSION['username'])) {
+    if (!isset($_SESSION['username']) || empty($_SESSION['username'])) {
         header("Location: login.php");
         exit();
     }
@@ -27,7 +26,8 @@
             if ($_POST['password'] === $_POST['passwordConf']) {
                 $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
             } else {
-                echo "<script>alert('Passwords do not match.');</script>";
+                showToast('Passwords do not match.', 'danger');
+                header("Location: user.php");
                 exit();
             }
         } else {
@@ -38,19 +38,17 @@
         $name = $_POST['name'] ?? $user['name'];
         $surname = $_POST['surname'] ?? $user['surname'];
         $profilePicture = $user['pfp_image_url'];
-    
+
+        // File upload logic
         if (isset($_FILES['profilePicture']) && $_FILES['profilePicture']['error'] === UPLOAD_ERR_OK) {
             $targetDir = "uploads/";
             $fileInfo = pathinfo($_FILES["profilePicture"]["name"]);
             $extension = strtolower($fileInfo['extension']);
             
-            // Validate file extension and MIME type
-            $validExtensions = ['jpg', 'jpeg', 'png', 'gif']; // Add allowed extensions here
-            $mimeType = mime_content_type($_FILES["profilePicture"]["tmp_name"]);
-            $validMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
-            
-            if (!in_array($extension, $validExtensions) || !in_array($mimeType, $validMimeTypes)) {
-                echo "<script>alert('Invalid file type. Please upload a valid image.');</script>";
+            // Validate file extension
+            $validExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+            if (!in_array($extension, $validExtensions)) {
+                showToast('Invalid file type. Please upload a valid image.');
             } else {
                 $timestamp = time();
                 $newProfilePicture = $username . "_$timestamp." . $extension;
@@ -58,7 +56,7 @@
         
                 // Backup or remove the old file
                 if (!empty($user['pfp_image_url']) && file_exists($targetDir . $user['pfp_image_url'])) {
-                    $backupFilePath = $targetDir . "backup_" . pathinfo($user['pfp_image_url'], PATHINFO_FILENAME) . ".$timestamp." . pathinfo($user['pfp_image_url'], PATHINFO_EXTENSION);
+                    $backupFilePath = $targetDir . "backup_" . pathinfo($user['pfp_image_url'], PATHINFO_FILENAME) . "_$timestamp." . pathinfo($user['pfp_image_url'], PATHINFO_EXTENSION);
                     rename($targetDir . $user['pfp_image_url'], $backupFilePath);
                 }
         
@@ -66,7 +64,7 @@
                 if (move_uploaded_file($_FILES["profilePicture"]["tmp_name"], $targetFilePath)) {
                     $profilePicture = $newProfilePicture;
                 } else {
-                    echo "<script>alert('Failed to upload profile picture. Retaining current picture.');</script>";
+                    showToast('Failed to upload profile picture. Retaining current picture.', 'alert');
                 }
             }
         }
@@ -84,16 +82,20 @@
         $stmt->bindParam(':surname', $surname);
         $stmt->bindParam(':profilePicture', $profilePicture);
         $stmt->bindParam(':password', $password);
-    
+
         if ($stmt->execute()) {
-            echo "<script>alert('Profile updated successfully!');</script>";
+           showToast('Profile updated successfully!', 'success');
             header("Location: user.php");
             exit();
         } else {
-            echo "<script>alert('Error updating profile. Please try again.');</script>";
+            showToast('Error updating profile. Please try again.', 'danger');
         }
     }
 
+    function showToast($message, $type = 'success') {
+        // Use session to carry the toast messages to the front end
+        $_SESSION['toast_message'] = ['message' => $message, 'type' => $type];
+    }
 ?>
 
 <!doctype html>
@@ -132,7 +134,7 @@
                 <!-- username -->
                 <div class="col-md-6">
                     <div class="form-outline">
-                        <input disabled type="username" id="username" name="username" class="form-control" value="<?php echo htmlspecialchars($user['username']); ?>"/>
+                        <input disabled type="text" id="username" name="username" class="form-control" value="<?php echo htmlspecialchars($user['username']); ?>"/>
                         <label class="form-label" for="username">Username</label>
                     </div>
                 </div>
@@ -204,13 +206,52 @@
 
                 <!-- Index -->
                 <div class="d-flex justify-content-center mt-4">
-                    <button type="submit" class="btn btn-block btn-mb-4" style="background: rgb(248, 179, 2)" onclick="window.location.href='index.php'; return false;">Home</button>
+                    <button type="button" class="btn btn-block btn-mb-4" style="background: rgb(248, 179, 2)" onclick="window.location.href='index.php';">Home</button>
                 </div>
 
             </div>
 
-
         </form>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Check if there's a toast message stored in the session
+            <?php if (isset($_SESSION['toast_message'])): ?>
+                const toastMessage = <?php echo json_encode($_SESSION['toast_message']); ?>;
+                
+                // Create the toast element
+                let toastHTML = `
+                    <div class="toast align-items-center text-bg-${toastMessage.type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                ${toastMessage.message}
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                    </div>
+                `;
+                
+                // Add toast to the container
+                document.getElementById('toast-container').innerHTML += toastHTML;
+
+                // Initialize and show the toast
+                let toast = new bootstrap.Toast(document.querySelector('.toast:last-child'));
+                toast.show();
+
+                setTimeout(() => {
+                    toast.hide();  // Close the toast programmatically
+                }, 7000);
+
+                // Clear the session toast message after showing
+                <?php unset($_SESSION['toast_message']); ?>
+            <?php endif; ?>
+        });
+    </script>
+
+
+    <div id="toast-container" class="position-fixed bottom-0 end-0 p-3">
+    <!-- Toast messages will be added here dynamically -->
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
