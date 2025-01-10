@@ -54,10 +54,10 @@
     }
 
     // Fetch associated tasks
-    $query = 'SELECT t.id, t.title, t.description, t.date_creation, t.priority_level, t.date_completion, ut.advancement_perc, ut.id_user 
-        FROM tm1_tasks t
-        LEFT JOIN tm1_user_task ut ON t.id = ut.id_task
-        WHERE t.id_project = :id';
+    $query = 'SELECT DISTINCT t.id, t.title, t.description, t.date_creation, t.priority_level, t.date_completion, t.id_project, p.title AS project_title
+                FROM tm1_tasks t
+                JOIN tm1_projects p ON t.id_project = p.id
+                ';
 
     $stmt = $conn->prepare($query);
     $stmt->bindValue(":id", $id, PDO::PARAM_INT);
@@ -161,7 +161,7 @@
 
             if ($user) {
                 // Add the user to the project with a default role (e.g., viewer)
-                $query = "INSERT INTO tm1_user_project (id_project, id_user, worker_wage_h, id_role) VALUES (:project_id, :user_id, 50.0, 3)";
+                $query = "INSERT INTO tm1_user_project (id_project, id_user, id_role) VALUES (:project_id, :user_id, 3)";
                 $stmt = $conn->prepare($query);
                 $stmt->bindValue(':project_id', $id, PDO::PARAM_INT);
                 $stmt->bindValue(':user_id', $newMemberUsername, PDO::PARAM_STR);
@@ -222,8 +222,13 @@
             $stmt = $conn->prepare("DELETE FROM tm1_tasks WHERE id_project = :projectId");
             $stmt->bindParam(':projectId', $projectId, PDO::PARAM_INT);
             $stmt->execute();
+
+            // Step 5: Delete files from tm1_project_files (files related to the project)
+            $stmt = $conn->prepare('SELECT filename FROM tm1_project_files WHERE id_project = :projectId');
+            $stmt->bindParam(':projectId', $projectId, PDO::PARAM_);
+            $stmt->execute();
     
-            // Step 5: Finally, delete the project from tm1_projects
+            // Step 6: Finally, delete the project from tm1_projects
             $stmt = $conn->prepare("DELETE FROM tm1_projects WHERE id = :projectId");
             $stmt->bindParam(':projectId', $projectId, PDO::PARAM_INT);
             $stmt->execute();
@@ -251,7 +256,182 @@
             ];
         }
     }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_file'])) {
+        $targetDir = "uploads/";
+        $fileName = basename($_FILES["file"]["name"]);
+        $targetFilePath = $targetDir . $fileName;
     
+        if (move_uploaded_file($_FILES["file"]["tmp_name"], $targetFilePath)) {
+            // Insert file details into the database
+            $stmt = $conn->prepare("INSERT INTO tm1_project_files (filename, id_project, uploader) VALUES (:filename, :id_project, :uploader)");
+            $stmt->bindValue(":filename", $fileName);
+            $stmt->bindValue(":id_project", $id, PDO::PARAM_INT);
+            $stmt->bindValue(":uploader", $username);
+            $stmt->execute();
+            $_SESSION['toast'] = [
+                'type' => 'success',
+                'message' => 'File uploaded successfully!'
+            ];
+            header("Location: proj.php?id=$id");
+            exit();
+        } else {
+            $_SESSION['toast'] = [
+                'type' => 'danger',
+                'message' => 'File upload failed.'
+            ];
+            header("Location: proj.php?id=$id");
+            exit();
+        }
+    }    
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_file'])) {
+        $fileId = $_POST['delete_file'];
+    
+        // Delete the file record and the file itself
+        $stmt = $conn->prepare('SELECT filename FROM tm1_project_files WHERE id = :id');
+        $stmt->bindValue(':id', $fileId, PDO::PARAM_INT);
+        $stmt->execute();
+        $file = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+        if ($file) {
+            $filePath = 'uploads/' . $file['filename'];
+            if (file_exists($filePath)) {
+                unlink($filePath);
+            }
+            $stmt = $conn->prepare('DELETE FROM tm1_project_files WHERE id = :id');
+            $stmt->bindValue(':id', $fileId, PDO::PARAM_INT);
+            $stmt->execute();
+    
+            $_SESSION['toast'] = [
+                'type' => 'success',
+                'message' => 'File deleted successfully!'
+            ];
+            header("Location: proj.php?id=$id");
+            exit();
+        } else {
+            $_SESSION['toast'] = [
+                'type' => 'danger',
+                'message' => 'Error: File not found.'
+            ];
+            header("Location: proj.php?id=$id");
+            exit();
+        }
+    }
+    
+    // Handle form submission for creating a new task
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_task'])) {
+        $title = $_POST['title'];
+        $description = $_POST['description'];
+        $priority = $_POST['priority'];
+        $dateCompletion = $_POST['due_date'];
+        $dateCreation = date('Y-m-d');
+
+        $query = 'INSERT INTO tm1_tasks (title, description, date_creation, priority_level, date_completion, id_project)
+                VALUES (:title, :description, :date_creation, :priority_level, :date_completion, :id_project)';
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':title', $title, PDO::PARAM_STR);
+        $stmt->bindValue(':description', $description, PDO::PARAM_STR);
+        $stmt->bindValue(':date_creation', $dateCreation, PDO::PARAM_STR);
+        $stmt->bindValue(':priority_level', $priority, PDO::PARAM_STR);
+        $stmt->bindValue(':date_completion', $dateCompletion, PDO::PARAM_STR);
+        $stmt->bindValue(':id_project', $id, PDO::PARAM_INT);
+
+        if ($stmt->execute()) {
+            $_SESSION['toast'] = [
+                'type' => 'success',
+                'message' => 'Task created successfully.'
+            ];
+        } else {
+            $_SESSION['toast'] = [
+                'type' => 'danger',
+                'message' => 'Error creating task.'
+            ];
+        }
+        header("Location: proj.php?id=$id");
+        exit();
+    }
+
+    // Handle task deletion
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_task_id'])) {
+        $taskId = $_POST['delete_task_id'];
+        
+        try {
+            // Start a transaction to ensure both deletions happen together
+            $conn->beginTransaction();
+
+            // Delete related rows from tm1_user_task table
+            $deleteUserTaskStmt = $conn->prepare("DELETE FROM tm1_user_task WHERE id_task = :taskId");
+            $deleteUserTaskStmt->bindParam(':taskId', $taskId, PDO::PARAM_INT);
+            $deleteUserTaskStmt->execute();
+
+            // Delete related rows from tm1_user_task table
+            $deleteUserTaskStmt = $conn->prepare("DELETE FROM tm1_edits WHERE id_task = :taskId");
+            $deleteUserTaskStmt->bindParam(':taskId', $taskId, PDO::PARAM_INT);
+            $deleteUserTaskStmt->execute();
+
+            // Now delete the task from tm1_tasks table
+            $deleteTaskStmt = $conn->prepare("DELETE FROM tm1_tasks WHERE id = :taskId");
+            $deleteTaskStmt->bindParam(':taskId', $taskId, PDO::PARAM_INT);
+            $deleteTaskStmt->execute();
+
+            // Commit the transaction if both deletions are successful
+            $conn->commit();
+
+            // Display success message and reload the page to reflect changes
+            $_SESSION['toast'] = [
+                'type' => 'success',
+                'message' => 'Task and related data deleted successfully.'
+            ];
+            header("Location: proj.php?id=$id");
+            exit();
+
+        } catch (Exception $e) {
+            $conn->rollBack();
+            // Display error message
+            echo '<div class="alert alert-danger mt-3">Error deleting task: ' . $e->getMessage() . '</div>';
+        $_SESSION['toast'] = [
+            'type' => 'danger',
+            'message' => 'Error deleting task: ' . $e->getMessage()
+        ];
+        header("Location: proj.php?id=$id");
+        exit();
+        }
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'], $_POST['task_id'])) {
+        $username = $_POST['username'];
+        $taskId = $_POST['task_id'];
+    
+        try {
+            // Insert user-task assignment into tm1_user_task table
+            $insertUserTaskStmt = $conn->prepare("
+                INSERT INTO tm1_user_task (id_user, id_task, advancement_perc) 
+                VALUES (:userId, :taskId, 0)
+            ");
+            $insertUserTaskStmt->bindParam(':userId', $username, PDO::PARAM_STR); // Use PDO::PARAM_STR if id_user is not an INT
+
+            $insertUserTaskStmt->bindParam(':taskId', $taskId, PDO::PARAM_INT);
+            $insertUserTaskStmt->execute();
+
+            // Display success message and reload the page to reflect changes
+            $_SESSION['toast'] = [
+                'type' => 'success',
+                'message' => 'User successfully added to task.'
+            ];
+            header("Location: proj.php?id=$id");
+            exit();
+
+        } catch (PDOException $e) {
+            $_SESSION['toast'] = [
+                'type' => 'danger',
+                'message' => 'Error adding user to task: ' . $e->getMessage()
+            ];
+            header("Location: proj.php?id=$id");
+            exit();
+        }
+    }
+
 ?>
 
 <!doctype html>
@@ -406,9 +586,11 @@
                                         }
                                         else{
                                             echo '
-                                            <form method="post">
+                                            <form method="post" id="deleteForm">
                                                 <input type="hidden" name="delete" value="'. $project['id'] .'">
-                                                <button type="submit" class="btn btn-danger">Delete Project</button>
+                                                <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#confirmDeleteModal">
+                                                    Delete Project
+                                                </button>
                                             </form>';
                                         }
                                     ?>
@@ -437,6 +619,7 @@
                                     $stmt->bindValue(":id", $id, PDO::PARAM_INT);
                                     $stmt->execute();
                                     $projectDetails = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                                    
                                     if (empty($projectDetails)) {
                                         echo "<p>No members found.</p>";
                                     } else {
@@ -479,17 +662,206 @@
                     </div>
 
                     <div class="row mb-2 text-center">
-                        <?php
-                            if (empty($tasks)) {
-                                echo "<p>No tasks found.</p>";
-                            } else {
-                                foreach ($tasks as $index => $task) {
+                        <div class="col-md-12 d-flex">
+                            <div class="card flex-fill shadow-sm" style="width: 100%;">
+                                <div class="card-header">
+                                    <strong>Project Files</strong>
+                                </div>
+                                <div class="card-body">
+                                    <?php
+                                    // Fetch project files and their details
+                                    $query = 'SELECT pf.id, pf.filename, pf.uploader
+                                            FROM tm1_project_files pf
+                                            WHERE pf.id_project = :id';
 
-                                }
-                            }
-                        ?>
+                                    $stmt = $conn->prepare($query);
+                                    $stmt->bindValue(":id", $id, PDO::PARAM_INT);
+                                    $stmt->execute();
+                                    $projectFiles = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                                    if (empty($projectFiles)) {
+                                        echo "<p>No files found.</p>";
+                                    } else {
+                                        echo '<ul class="list-group mb-3">';
+                                        foreach ($projectFiles as $file) {
+                                            echo '<li class="list-group-item d-flex justify-content-between align-items-center">';
+                                            echo '<div>';
+                                            echo '<a href="uploads/' . htmlspecialchars($file['filename'], ENT_QUOTES, 'UTF-8') . '" target="_blank">' . htmlspecialchars($file['filename'], ENT_QUOTES, 'UTF-8') . '</a>';
+                                            echo ' <small class="text-muted">uploaded by ' . htmlspecialchars($file['uploader'], ENT_QUOTES, 'UTF-8') . '</small>';
+                                            echo '</div>';
+
+                                            if($project['role_name'] !== 'viewer') {
+                                                // Inside the loop to display each file
+                                                echo '<div class""><form method="post" style="display: inline;">
+                                                <input type="hidden" name="delete_file" value="' . htmlspecialchars($file['id'], ENT_QUOTES, 'UTF-8') . '">
+                                                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal" data-fileid="' . htmlspecialchars($file['id'], ENT_QUOTES, 'UTF-8') . '">Delete</button>
+                                                </form>';
+                                                echo '<a href="uploads/' . htmlspecialchars($file['filename'], ENT_QUOTES, 'UTF-8') . '" class="btn btn-success btn-sm" download>Download</a></div>';
+                                                echo '</li>';
+                                            }
+
+                                        }
+                                        echo '</ul>';
+                                    }
+                                    ?>
+
+                                    <?php if ($project['role_name'] !== 'viewer'): ?>
+                                        <form method="post" enctype="multipart/form-data">
+                                            <input type="hidden" name="upload_file" value="1">
+                                            <div class="mb-3">
+                                                <label for="fileUpload" class="form-label"><strong>Upload New File</strong></label>
+                                                <input type="file" class="form-control" id="fileUpload" name="file" required>
+                                            </div>
+                                            <button type="submit" class="btn btn-primary">Upload File</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    
+
+                    <div class="row mb-5 mt-5 text-center">
+                        <?php
+                        foreach ($tasks as $task) {
+                            // Fetch participants and their advancement percentages
+                            $participantsStmt = $conn->prepare("
+                                SELECT u.username, ut.advancement_perc, e.date_modification 
+                                FROM tm1_user_task ut
+                                LEFT JOIN tm1_users u ON ut.id_user = u.username
+                                LEFT JOIN tm1_edits e ON ut.id_task = e.id_task
+                                WHERE ut.id_task = :taskId
+                                ORDER BY ut.advancement_perc DESC, e.date_modification DESC
+                            ");
+                            $participantsStmt->bindParam(':taskId', $task['id'], PDO::PARAM_INT);
+                            $participantsStmt->execute();
+                            $participants = $participantsStmt->fetchAll(PDO::FETCH_ASSOC);
+                        
+                            $participantsStmt->bindParam(':taskId', $task['id'], PDO::PARAM_INT);
+                            $participantsStmt->execute();
+                            $participants = $participantsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                            // Fetch users for the project (username instead of user ID)
+                            $usersStmt = $conn->prepare("
+                                SELECT id_user
+                                FROM tm1_user_project 
+                                WHERE id_project = :projectId
+                            ");
+                            $usersStmt->bindParam(':projectId', $task['id_project'], PDO::PARAM_INT);
+                            $usersStmt->execute();
+                            $users = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                            // Display task details in a card
+                            echo '<div class="col-md-3 d-flex mb-2">';
+                            echo '<div class="card flex-fill" style="width: 100%;">';
+
+                            echo '<div class="card-body">';
+                            echo '<h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8') . '</h5>';
+                            echo '<p class="card-text">' . htmlspecialchars($task['description'], ENT_QUOTES, 'UTF-8') . '</p>';
+                            echo '<p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>';
+                            echo '</div>';
+
+                            echo '<ul class="list-group list-group-flush">';
+                            echo '<li class="list-group-item">Priority: ' . htmlspecialchars($task['priority_level'], ENT_QUOTES, 'UTF-8') . '</li>';
+                            echo '<li class="list-group-item">Created on: ' . htmlspecialchars($task['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>';
+                            echo '<li class="list-group-item">Due Date: ' . htmlspecialchars($task['date_completion'], ENT_QUOTES, 'UTF-8') . '</li>';
+                            echo '<li class="list-group-item"><strong>Participants:</strong>';
+
+                            // Display participants
+                            echo '<ul>';
+                            foreach ($participants as $participant) {
+                                echo '<li>' . htmlspecialchars($participant['username'], ENT_QUOTES, 'UTF-8') .
+                                    ' - Advancement: ' . htmlspecialchars($participant['advancement_perc'], ENT_QUOTES, 'UTF-8') . '%</li>';
+                            }
+                            echo '</ul></li>';
+
+                            // Display the last edit date
+                            if (!empty($participants) && $participants[0]['date_modification']) {
+                                echo '<li class="list-group-item">Last Edit: ' . htmlspecialchars($participants[0]['date_modification'], ENT_QUOTES, 'UTF-8') . '</li>';
+                            }
+
+
+                            if ($project['role_name'] !== 'viewer') {
+                                echo '<li class="list-group-item">';
+                                echo '<form method="post" class="d-inline">';
+                                echo '<label for="addUserToTask' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '" class="form-label">Add User to Task</label>';
+                                echo '<select id="addUserToTask' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '" name="username" class="form-select mt-2">';
+                                
+                                // Populate the dropdown with users
+                                foreach ($users as $user) {
+                                    echo '<option value="' . htmlspecialchars($user['id_user'], ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($user['id_user'], ENT_QUOTES, 'UTF-8') . '</option>';
+                                }
+                                
+                                echo '</select>';
+                                echo '<button type="submit" class="btn btn-success btn-sm mt-2">Add User</button>';
+                                echo '<input type="hidden" name="task_id" value="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">';
+                                echo '</form>';
+                                echo '</li>';
+                            }
+                            echo '</ul>';
+                            // Buttons section
+                            echo '<div class="card-body d-flex justify-content-between">';
+                            echo '<a href="task-details.php?id=' . urlencode($task['id']) . '" class="btn btn-primary btn-sm">View Details</a>';
+
+                            if ($project['role_name'] !== 'viewer') {
+                                echo '<a href="edit-task.php?id=' . urlencode($task['id']) . '" class="btn btn-secondary btn-sm">Edit Task</a>';
+                                echo '<button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteTaskModal" data-taskid="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">Delete Task</button>';
+                            }
+                            echo '</div>';
+
+                            echo '</div>';
+                            echo '</div>';
+                        }
+                    ?>
+                    </div>
+
+
+
+                    <?php if ($project['role_name'] !== 'viewer'): ?>
+                    <div class="row mb-2 text-center">
+                        <div class="col-md-12 d-flex">
+                            <div class="card flex-fill shadow-sm" style="width: 100%;">
+                                <div class="card-header">
+                                    <strong>Create New Task</strong>
+                                </div>
+                                <div class="card-body">
+                                        <form method="post">
+                                            <input type="hidden" name="create_task" value="1">
+                                            <div class="mb-3">
+                                                <label for="taskTitle" class="form-label"><strong>Task Title</strong></label>
+                                                <input type="text" class="form-control" id="taskTitle" name="title" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="taskDescription" class="form-label"><strong>Task Description</strong></label>
+                                                <textarea class="form-control" id="taskDescription" name="description" rows="3" required></textarea>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="taskPriority" class="form-label"><strong>Priority Level (1-10)</strong></label>
+                                                <input type="number" class="form-control" id="taskPriority" name="priority" min="1" max="10" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="taskDueDate" class="form-label"><strong>Due Date</strong></label>
+                                                <input type="date" class="form-control" id="taskDueDate" name="due_date" required>
+                                            </div>
+
+                                            <script>
+                                                // Set the minimum value for the due date input to tomorrow's date
+                                                const dueDateInput = document.getElementById('taskDueDate');
+                                                const today = new Date();
+                                                const tomorrow = new Date(today);
+                                                tomorrow.setDate(today.getDate() + 1); // Add 1 day to today's date
+                                                const minDate = tomorrow.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+                                                dueDateInput.min = minDate;
+                                            </script>
+
+                                            <button type="submit" class="btn btn-primary">Create Task</button>
+                                        </form>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
                     <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1055;">
                         <?php if (isset($_SESSION['toast'])): ?>
                             <div class="toast align-items-center text-bg-<?= htmlspecialchars($_SESSION['toast']['type']) ?> border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
@@ -515,7 +887,6 @@
                                 toast.hide();  // Close the toast programmatically
                             }, 7000);
 
-
                             toastList.forEach(toast => toast.show());
                         });
                     </script>
@@ -524,6 +895,106 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal -->
+    <div class="modal fade" id="confirmDeleteModal" tabindex="-1" role="dialog" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmDeleteModalLabel">Confirm Deletion</h5>
+                    <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to delete this project? This action cannot be undone.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteModalLabel">Confirm File Deletion</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to delete this file?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form method="post" id="deleteFileForm">
+                        <input type="hidden" name="delete_file" id="deleteFileId">
+                        <button type="submit" class="btn btn-danger">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for task deletion confirmation -->
+    <div class="modal fade" id="deleteTaskModal" tabindex="-1" aria-labelledby="deleteTaskModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteTaskModalLabel">Confirm Deletion</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to delete this task? This action cannot be undone.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form id="deleteTaskForm" method="post" style="display: inline;">
+                        <input type="hidden" name="delete_task_id" id="deleteTaskId" value="">
+                        <button type="submit" class="btn btn-danger">Delete Task</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include jQuery and Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+    <script>
+        document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+            // Programmatically submit the form when delete is confirmed
+            document.getElementById('deleteForm').submit();
+        });
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var deleteModal = document.getElementById('deleteModal');
+            deleteModal.addEventListener('show.bs.modal', function (event) {
+                // Button that triggered the modal
+                var button = event.relatedTarget;
+                // Extract file ID from data-* attributes
+                var fileId = button.getAttribute('data-fileid');
+                // Update the form to include the file ID
+                var deleteFileInput = document.getElementById('deleteFileId');
+                deleteFileInput.value = fileId;
+            });
+        });
+
+        // JavaScript to handle modal task ID population
+        document.addEventListener("DOMContentLoaded", function() {
+            const deleteButtons = document.querySelectorAll('[data-bs-toggle="modal"][data-bs-target="#deleteTaskModal"]');
+            
+            deleteButtons.forEach(button => {
+                button.addEventListener("click", function() {
+                    const taskId = this.getAttribute('data-taskid');
+                    document.getElementById('deleteTaskId').value = taskId; // Set the task ID to the hidden input field
+                });
+            });
+        });
+    </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 </body>

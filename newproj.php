@@ -48,12 +48,11 @@
             $project_id = $conn->lastInsertId();
 
             // Insert into tm1_user_project with creator role (id_role = 1)
-            $query = "INSERT INTO tm1_user_project (id_user, id_project, worker_wage_h, id_role) 
-                    VALUES (:id_user, :id_project, :worker_wage_h, :id_role)";
+            $query = "INSERT INTO tm1_user_project (id_user, id_project, id_role) 
+                    VALUES (:id_user, :id_project, :id_role)";
             $stmt = $conn->prepare($query);
             $stmt->bindValue(':id_user', $id_creator);
             $stmt->bindValue(':id_project', $project_id);
-            $stmt->bindValue(':worker_wage_h', 50.00); // Creator has programmer average wage per hour of work
             $stmt->bindValue(':id_role', 1); // Creator
             $stmt->execute();
 

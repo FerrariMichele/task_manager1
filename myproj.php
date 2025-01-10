@@ -44,6 +44,13 @@
     $stmt->bindParam(':username', $username);
     $stmt->execute();
     $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $query = "SELECT pfp_image_url FROM tm1_users WHERE username = :username";
+    $stmt = $conn->prepare($query);
+    $stmt->bindValue(":username", $username);
+    $stmt->execute();
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profile picture
 ?>
 
 <!doctype html>
@@ -155,15 +162,14 @@
                 </div>
             </div>
 
+            <!-- Main Content -->
             <div class="col content">
                 <div class="container-fluid px-0">
                     <div class="row mb-2 text-center">
                         <strong><?= date("l, F j, Y") ?></strong>
                     </div>
-
-                    <!-- Section for "Your Projects" -->
                     <div class="row mb-2">
-                        <p>Your Projects:</p>
+                        Your Projects:
                     </div>
                     <div class="row mb-2">
                         <?php
@@ -198,10 +204,11 @@
 
                     <!-- Section for "Projects You Are Part Of" -->
                     <div class="row mb-2">
-                        <p>Projects You Are Part Of:</p>
+                        Projects You Are Part Of:
                     </div>
                     <div class="row mb-2">
                         <?php
+                        $displayedProjects = [];
                         foreach ($projects as $project) {
                             if ($project['user_role'] === 'participant' && !in_array($project['id'], $displayedProjects)) {
                                 $displayedProjects[] = $project['id'];
@@ -224,6 +231,9 @@
                                     </div>
                                 </div>';
                             }
+                        }
+                        if (empty($displayedProjects)) {
+                            echo "<p>No projects found.</p>";
                         }
                         ?>
                     </div>
