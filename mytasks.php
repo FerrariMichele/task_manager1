@@ -150,11 +150,12 @@
                     <div class="row mb-2">
                         <?php
                         // Fetch tasks sorted by closest due date
-                        $stmt = $conn->prepare("SELECT t.*, ut.advancement_perc, p.title AS project_title
+                        $stmt = $conn->prepare("SELECT t.*, ut.advancement_perc, p.title AS project_title, up.id_role
                                                 FROM tm1_tasks t
                                                 JOIN tm1_user_task ut ON t.id = ut.id_task
                                                 LEFT JOIN tm1_projects p ON t.id_project = p.id
-                                                WHERE ut.id_user = :id_user
+                                                LEFT JOIN tm1_user_project up ON up.id_user = ut.id_user AND up.id_project = t.id_project
+                                                WHERE ut.id_user = :id_user  AND t.is_completed = 0
                                                 ORDER BY t.date_completion");
                         $stmt->bindParam(':id_user', $username);
                         $stmt->execute();
@@ -168,10 +169,18 @@
                                 $advancement = htmlspecialchars($task['advancement_perc'], ENT_QUOTES, 'UTF-8');
                                 echo '
                                 <div class="col-md-3 d-flex mb-2">
-                                    <div class="card flex-fill" style="width: 100%;">
+                                    <div class="card flex-fill';
+                                    if($task['date_completion'] < date("Y-m-d")) {
+                                        echo ' text-bg-danger';
+                                    }
+                                    echo '" style="width: 100%;">
                                         <div id="chart_' . $index . '" style="width: 100%; height: 10vw;"></div>
                                         <div class="card-body">
-                                            <h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8') . '</h5>
+                                            <h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8');
+                                            if($task['date_completion'] < date("Y-m-d")) {
+                                                echo '<strong> - EXPIRED</strong>';
+                                            }
+                                            echo'</h5>
                                             <p class="card-text">' . htmlspecialchars($task['description'], ENT_QUOTES, 'UTF-8') . '</p>
                                             <p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>
                                         </div>
@@ -182,9 +191,11 @@
                                             <li class="list-group-item">Advancement: ' . htmlspecialchars($task['advancement_perc'], ENT_QUOTES, 'UTF-8') . '%</li>
                                         </ul>
                                         <div class="card-body">
-                                            <a href="task-details.php?id=' . urlencode($task['id']) . '" class="card-link">View Details</a>
-                                            <a href="edit-task.php?id=' . urlencode($task['id']) . '" class="card-link">Edit Task</a>
-                                        </div>
+                                            <a href="taskdetail.php?id=' . urlencode($task['id']) . '" class="card-link">View Details</a>';
+                                    if ($task['id_role'] != 3) {
+                                        echo '<a href="edit-task.php?id=' . urlencode($task['id']) . '" class="card-link">Edit Task</a>';
+                                    }
+                                        echo '</div>
                                     </div>
                                 </div>';
     

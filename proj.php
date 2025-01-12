@@ -54,9 +54,10 @@
     }
 
     // Fetch associated tasks
-    $query = 'SELECT DISTINCT t.id, t.title, t.description, t.date_creation, t.priority_level, t.date_completion, t.id_project, p.title AS project_title
+    $query = 'SELECT DISTINCT t.id, t.title, t.description, t.date_creation, t.priority_level, t.date_start, t.date_completion, t.is_completed, t.id_project, p.title AS project_title
                 FROM tm1_tasks t
                 JOIN tm1_projects p ON t.id_project = p.id
+                ORDER BY t.date_completion
                 ';
 
     $stmt = $conn->prepare($query);
@@ -324,17 +325,29 @@
         $title = $_POST['title'];
         $description = $_POST['description'];
         $priority = $_POST['priority'];
+        $dateStart = $_POST['start_date'];
         $dateCompletion = $_POST['due_date'];
         $dateCreation = date('Y-m-d');
 
-        $query = 'INSERT INTO tm1_tasks (title, description, date_creation, priority_level, date_completion, id_project)
-                VALUES (:title, :description, :date_creation, :priority_level, :date_completion, :id_project)';
+        if($dateStart > $dateCompletion){
+            $_SESSION['toast'] = [
+                'type' => 'danger',
+                'message' => 'Error: Start date cannot be after due date.'
+            ];
+            header("Location: proj.php?id=$id");
+            exit();
+        }
+
+        $query = 'INSERT INTO tm1_tasks (title, description, date_creation, priority_level, date_start, date_completion, is_completed, id_project)
+                VALUES (:title, :description, :date_creation, :priority_level, :date_start, :date_completion, :is_completed, :id_project)';
         $stmt = $conn->prepare($query);
         $stmt->bindValue(':title', $title, PDO::PARAM_STR);
         $stmt->bindValue(':description', $description, PDO::PARAM_STR);
         $stmt->bindValue(':date_creation', $dateCreation, PDO::PARAM_STR);
         $stmt->bindValue(':priority_level', $priority, PDO::PARAM_STR);
+        $stmt->bindValue(':date_start', $dateStart, PDO::PARAM_STR);
         $stmt->bindValue(':date_completion', $dateCompletion, PDO::PARAM_STR);
+        $stmt->bindValue(':is_completed', 0, PDO::PARAM_BOOL);
         $stmt->bindValue(':id_project', $id, PDO::PARAM_INT);
 
         if ($stmt->execute()) {
@@ -432,6 +445,120 @@
         }
     }
 
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_user_task_id'], $_POST['remove_user_task_user'])) {
+        $projectId = $_GET['id'];
+        $taskId = $_POST['remove_user_task_id'];
+        $username = $_POST['remove_user_task_user'];
+    
+        // Assume $conn is your PDO connection and $projectId is the current project ID
+        $stmt = $conn->prepare('DELETE FROM tm1_user_task WHERE id_task = :task_id AND id_user = :username');
+        $stmt->bindValue(':task_id', $taskId, PDO::PARAM_INT);
+        $stmt->bindValue(':username', $username, PDO::PARAM_STR);
+        $stmt->execute();
+    
+        if ($stmt->rowCount() > 0) {
+            $_SESSION['toast'] = [
+                'type' => 'success',
+                'message' => 'User removed from task successfully!'
+            ];
+        } else {
+            $_SESSION['toast'] = [
+                'type' => 'danger',
+                'message' => 'Error: Could not remove user from task.'
+            ];
+        }
+    
+        header("Location: proj.php?id=$projectId");
+        exit();
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_user_proj_id'], $_POST['remove_user_proj_user'])) {
+        $projId = $_POST['remove_user_proj_id'];
+        $username = $_POST['remove_user_proj_user'];
+    
+        // Start a transaction to ensure atomicity
+        $conn->beginTransaction();
+    
+        try {
+            // Step 1: Remove the user from the project
+            $stmt = $conn->prepare('DELETE FROM tm1_user_project WHERE id_project = :proj_id AND id_user = :username');
+            $stmt->bindValue(':proj_id', $projId, PDO::PARAM_INT);
+            $stmt->bindValue(':username', $username, PDO::PARAM_STR);
+            $stmt->execute();
+    
+            // Step 2: Remove the user from tasks associated with the project
+            $stmt = $conn->prepare('DELETE FROM tm1_user_task 
+                                    WHERE id_task IN (
+                                        SELECT id FROM tm1_tasks WHERE id_project = :proj_id
+                                    ) AND id_user = :username');
+            $stmt->bindValue(':proj_id', $projId, PDO::PARAM_INT);
+            $stmt->bindValue(':username', $username, PDO::PARAM_STR);
+            $stmt->execute();
+    
+            // Commit the transaction
+            $conn->commit();
+    
+            $_SESSION['toast'] = [
+                'type' => 'success',
+                'message' => 'User removed from project and associated tasks successfully!'
+            ];
+        } catch (Exception $e) {
+            // Roll back the transaction in case of an error
+            $conn->rollBack();
+    
+            $_SESSION['toast'] = [
+                'type' => 'danger',
+                'message' => 'Error: Could not remove user from project and tasks. ' . $e->getMessage()
+            ];
+        }
+    
+        // Redirect back to the project page
+        header("Location: proj.php?id=$projId");
+        exit();
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['quit_user_proj_id'], $_POST['quit_user_proj_user'])) {
+        $projId = $_POST['quit_user_proj_id'];
+        $username = $_POST['quit_user_proj_user'];
+
+        // Start a transaction to ensure atomicity
+        $conn->beginTransaction();
+    
+        try {
+            // Step 1: Remove the user from the project
+            $stmt = $conn->prepare('DELETE FROM tm1_user_project WHERE id_project = :proj_id AND id_user = :username');
+            $stmt->bindValue(':proj_id', $projId, PDO::PARAM_INT);
+            $stmt->bindValue(':username', $username, PDO::PARAM_STR);
+            $stmt->execute();
+    
+            // Step 2: Remove the user from tasks associated with the project
+            $stmt = $conn->prepare('DELETE FROM tm1_user_task 
+                                    WHERE id_task IN (
+                                        SELECT id FROM tm1_tasks WHERE id_project = :proj_id
+                                    ) AND id_user = :username');
+            $stmt->bindValue(':proj_id', $projId, PDO::PARAM_INT);
+            $stmt->bindValue(':username', $username, PDO::PARAM_STR);
+            $stmt->execute();
+    
+            // Commit the transaction
+            $conn->commit();
+
+            header('Location: leaveproj.php');
+            exit();
+        } catch (Exception $e) {
+            // Roll back the transaction in case of an error
+            $conn->rollBack();
+    
+            $_SESSION['toast'] = [
+                'type' => 'danger',
+                'message' => 'Error: Could not leave the project. ' . $e->getMessage()
+            ];
+        }
+    
+        // Redirect back to the project page
+        header("Location: proj.php?id=$projId");
+        exit();
+    }    
 ?>
 
 <!doctype html>
@@ -444,8 +571,84 @@
     <link rel="icon" type="image/x-icon" href="img/tanger_favi.png">
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <script type="text/javascript">
-        google.charts.load('current', { 'packages': ['corechart'] });
+        google.charts.load('current', {'packages': ['gantt']});
+        google.charts.setOnLoadCallback(drawChart);
+
+        function drawChart() {
+            var data = new google.visualization.DataTable();
+            data.addColumn('string', 'Task ID');
+            data.addColumn('string', 'Task Name');
+            data.addColumn('string', 'Project');
+            data.addColumn('date', 'Start Date');
+            data.addColumn('date', 'End Date');
+            data.addColumn('number', 'Duration');
+            data.addColumn('number', 'Percent Complete');
+            data.addColumn('string', 'Dependencies');
+
+            var tasks = <?php echo json_encode($tasks); ?>;
+            var now = new Date();
+
+            tasks.forEach(task => {
+                var startDate = new Date(task.date_start);
+                var endDate = new Date(task.date_completion);
+
+                if (endDate < now) {
+                    // Past tasks
+                    data.addRow([
+                        task.id,
+                        task.title + " (Ended)",
+                        "1",
+                        startDate,
+                        endDate,
+                        null,
+                        null, // Remove percent display
+                        null
+                    ]);
+                } else if (startDate <= now && endDate >= now) {
+                    // Ongoing tasks
+                    data.addRow([
+                        task.id,
+                        task.title + " (Ongoing)",
+                        "2",
+                        startDate,
+                        endDate,
+                        null,
+                        null, // Remove percent display
+                        null
+                    ]);
+                } else {
+                    // Future tasks
+                    data.addRow([
+                        task.id,
+                        task.title + " (Upcoming)",
+                        "3",
+                        startDate,
+                        endDate,
+                        null,
+                        null, // Remove percent display
+                        null
+                    ]);
+                }
+            });
+
+            var options = {
+                height: 400,
+                gantt: {
+                    trackHeight: 30,
+                    criticalPathEnabled: false, // Disable critical path styling
+                    labelStyle: {
+                        fontName: "Arial",
+                        fontSize: 12,
+                        color: "#555"
+                    }
+                }
+            };
+
+            var chart = new google.visualization.Gantt(document.getElementById('chart_div'));
+            chart.draw(data, options);
+        }
     </script>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
 
     <style>
@@ -582,7 +785,11 @@
                                         <?php
                                         if ($username !== $project['id_creator']) {
                                             echo '<p class="card-text"><strong>Project Owner: </strong>' . htmlspecialchars($project['id_creator'], ENT_QUOTES, 'UTF-8') . '</p>';
-                                            echo '<a href="leaveproj.php?id=' . urlencode($project['id']) . '" class="card-link">Leave Project</a>';
+                                            echo '<form method="post" style="display: inline;" class="ms-2">
+                                                    <input type="hidden" name="quit_user_proj_id" value="' . htmlspecialchars($project['id'], ENT_QUOTES, 'UTF-8') . '">
+                                                    <input type="hidden" name="quit_user_proj_user" value="' . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . '">
+                                                    <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#quitUserProjModal" data-projid="' . htmlspecialchars($project['id'], ENT_QUOTES, 'UTF-8') . '" data-username="' . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . '">Leave Project</button>
+                                                </form>';
                                         }
                                         else{
                                             echo '
@@ -630,16 +837,23 @@
                                             echo htmlspecialchars($row['username'], ENT_QUOTES, 'UTF-8');
                                             echo '<span>    </span><span class="badge bg-primary rounded-pill">' . htmlspecialchars($row['role_name'], ENT_QUOTES, 'UTF-8') . '</span></div>';
                                             if ($username == $project['id_creator'] && $row['username'] !== $project['id_creator']) {
-                                                echo '<form method="post" action="">
-                                                <input type="hidden" name="change_role" value="1">
-                                                <input type="hidden" name="project_id" value="' . htmlspecialchars($project['id'], ENT_QUOTES, 'UTF-8') . '">
-                                                <input type="hidden" name="user_id" value="' . htmlspecialchars($row['username'], ENT_QUOTES, 'UTF-8') . '">
-                                                <select name="new_role" class="form-select form-select-sm d-inline w-auto">
-                                                    <option value="2"' . ($row['role_name'] === 'admin' ? ' selected' : '') . '>Admin</option>
-                                                    <option value="3"' . ($row['role_name'] === 'viewer' ? ' selected' : '') . '>Viewer</option>
-                                                </select>
-                                                <button type="submit" class="btn btn-sm btn-primary ms-2">Change</button>
-                                                </form>';
+                                                echo '<div class="d-flex align-items-center">
+                                                <form method="post" action="" class="d-inline-flex align-items-center">
+                                                    <input type="hidden" name="change_role" value="1">
+                                                    <input type="hidden" name="project_id" value="' . htmlspecialchars($project['id'], ENT_QUOTES, 'UTF-8') . '">
+                                                    <input type="hidden" name="user_id" value="' . htmlspecialchars($row['username'], ENT_QUOTES, 'UTF-8') . '">
+                                                    <select name="new_role" class="form-select form-select-sm d-inline w-auto">
+                                                        <option value="2"' . ($row['role_name'] === 'admin' ? ' selected' : '') . '>Admin</option>
+                                                        <option value="3"' . ($row['role_name'] === 'viewer' ? ' selected' : '') . '>Viewer</option>
+                                                    </select>
+                                                    <button type="submit" class="btn btn-sm btn-primary ms-2">Change</button>
+                                                </form>
+                                                <form method="post" style="display: inline;" class="ms-2">
+                                                    <input type="hidden" name="remove_user_proj_id" value="' . htmlspecialchars($project['id'], ENT_QUOTES, 'UTF-8') . '">
+                                                    <input type="hidden" name="remove_user_proj_user" value="' . htmlspecialchars($row['username'], ENT_QUOTES, 'UTF-8') . '">
+                                                    <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#removeUserProjModal" data-projid="' . htmlspecialchars($project['id'], ENT_QUOTES, 'UTF-8') . '" data-username="' . htmlspecialchars($row['username'], ENT_QUOTES, 'UTF-8') . '">Remove</button>
+                                                </form>
+                                            </div>';                                                                                         
                                             }
                                             echo '</li>';
                                         }
@@ -720,101 +934,233 @@
                         </div>
                     </div>
 
-                    <div class="row mb-5 mt-5 text-center">
-                        <?php
-                        foreach ($tasks as $task) {
-                            // Fetch participants and their advancement percentages
-                            $participantsStmt = $conn->prepare("
-                                SELECT u.username, ut.advancement_perc, e.date_modification 
-                                FROM tm1_user_task ut
-                                LEFT JOIN tm1_users u ON ut.id_user = u.username
-                                LEFT JOIN tm1_edits e ON ut.id_task = e.id_task
-                                WHERE ut.id_task = :taskId
-                                ORDER BY ut.advancement_perc DESC, e.date_modification DESC
-                            ");
-                            $participantsStmt->bindParam(':taskId', $task['id'], PDO::PARAM_INT);
-                            $participantsStmt->execute();
-                            $participants = $participantsStmt->fetchAll(PDO::FETCH_ASSOC);
-                        
-                            $participantsStmt->bindParam(':taskId', $task['id'], PDO::PARAM_INT);
-                            $participantsStmt->execute();
-                            $participants = $participantsStmt->fetchAll(PDO::FETCH_ASSOC);
-
-                            // Fetch users for the project (username instead of user ID)
-                            $usersStmt = $conn->prepare("
-                                SELECT id_user
-                                FROM tm1_user_project 
-                                WHERE id_project = :projectId
-                            ");
-                            $usersStmt->bindParam(':projectId', $task['id_project'], PDO::PARAM_INT);
-                            $usersStmt->execute();
-                            $users = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
-
-                            // Display task details in a card
-                            echo '<div class="col-md-3 d-flex mb-2">';
-                            echo '<div class="card flex-fill" style="width: 100%;">';
-
-                            echo '<div class="card-body">';
-                            echo '<h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8') . '</h5>';
-                            echo '<p class="card-text">' . htmlspecialchars($task['description'], ENT_QUOTES, 'UTF-8') . '</p>';
-                            echo '<p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>';
-                            echo '</div>';
-
-                            echo '<ul class="list-group list-group-flush">';
-                            echo '<li class="list-group-item">Priority: ' . htmlspecialchars($task['priority_level'], ENT_QUOTES, 'UTF-8') . '</li>';
-                            echo '<li class="list-group-item">Created on: ' . htmlspecialchars($task['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>';
-                            echo '<li class="list-group-item">Due Date: ' . htmlspecialchars($task['date_completion'], ENT_QUOTES, 'UTF-8') . '</li>';
-                            echo '<li class="list-group-item"><strong>Participants:</strong>';
-
-                            // Display participants
-                            echo '<ul>';
-                            foreach ($participants as $participant) {
-                                echo '<li>' . htmlspecialchars($participant['username'], ENT_QUOTES, 'UTF-8') .
-                                    ' - Advancement: ' . htmlspecialchars($participant['advancement_perc'], ENT_QUOTES, 'UTF-8') . '%</li>';
-                            }
-                            echo '</ul></li>';
-
-                            // Display the last edit date
-                            if (!empty($participants) && $participants[0]['date_modification']) {
-                                echo '<li class="list-group-item">Last Edit: ' . htmlspecialchars($participants[0]['date_modification'], ENT_QUOTES, 'UTF-8') . '</li>';
-                            }
-
-
-                            if ($project['role_name'] !== 'viewer') {
-                                echo '<li class="list-group-item">';
-                                echo '<form method="post" class="d-inline">';
-                                echo '<label for="addUserToTask' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '" class="form-label">Add User to Task</label>';
-                                echo '<select id="addUserToTask' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '" name="username" class="form-select mt-2">';
-                                
-                                // Populate the dropdown with users
-                                foreach ($users as $user) {
-                                    echo '<option value="' . htmlspecialchars($user['id_user'], ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($user['id_user'], ENT_QUOTES, 'UTF-8') . '</option>';
+                    <?php if (!empty($tasks)): ?>
+                        <div class="row mb-5 mt-5 text-center">
+                            <?php
+                            foreach ($tasks as $task) {
+                                if($task['is_completed'] == 1) {
+                                    continue;
                                 }
-                                
-                                echo '</select>';
-                                echo '<button type="submit" class="btn btn-success btn-sm mt-2">Add User</button>';
-                                echo '<input type="hidden" name="task_id" value="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">';
-                                echo '</form>';
-                                echo '</li>';
+                                // Fetch participants and their advancement percentages
+                                $participantsStmt = $conn->prepare("
+                                    SELECT u.username, ut.advancement_perc
+                                    FROM tm1_user_task ut
+                                    LEFT JOIN tm1_users u ON ut.id_user = u.username
+                                    WHERE ut.id_task = :taskId
+                                    ORDER BY ut.advancement_perc DESC
+                                ");
+                                $participantsStmt->bindParam(':taskId', $task['id'], PDO::PARAM_INT);
+                                $participantsStmt->execute();
+                                $participants = $participantsStmt->fetchAll(PDO::FETCH_ASSOC);
+                            
+                                $participantsStmt->bindParam(':taskId', $task['id'], PDO::PARAM_INT);
+                                $participantsStmt->execute();
+                                $participants = $participantsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                                // Fetch users for the project (username instead of user ID)
+                                $usersStmt = $conn->prepare("
+                                    SELECT id_user
+                                    FROM tm1_user_project 
+                                    WHERE id_project = :projectId
+                                ");
+                                $usersStmt->bindParam(':projectId', $task['id_project'], PDO::PARAM_INT);
+                                $usersStmt->execute();
+                                $users = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                                // Display task details in a card
+                                echo '<div class="col-md-3 d-flex mb-2">';
+                                echo '<div class="card flex-fill';
+                                if($task['date_completion'] < date("Y-m-d")) {
+                                    echo ' text-bg-danger';
+                                }
+                                else if(empty($participants)) {
+                                    echo ' text-bg-warning';
+                                }
+                                echo '" style="width: 100%;">';
+
+                                echo '<div class="card-body">';
+                                echo '<h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8');
+                                if($task['date_completion'] < date("Y-m-d")) {
+                                    echo '<strong> - EXPIRED</strong>';
+                                }
+                                else if(empty($participants)) {
+                                    echo '<strong> - NO PARTICIPANTS</strong>';
+                                }
+                                echo'</h5>';
+                                echo '<p class="card-text">' . htmlspecialchars($task['description'], ENT_QUOTES, 'UTF-8') . '</p>';
+                                echo '<p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>';
+                                echo '</div>';
+
+                                echo '<ul class="list-group list-group-flush">';
+                                echo '<li class="list-group-item">Priority: ' . htmlspecialchars($task['priority_level'], ENT_QUOTES, 'UTF-8') . '</li>';
+                                echo '<li class="list-group-item">Created on: ' . htmlspecialchars($task['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>';
+                                echo '<li class="list-group-item">Start Date: ' . htmlspecialchars($task['date_start'], ENT_QUOTES, 'UTF-8') . '</li>';
+                                echo '<li class="list-group-item">Due Date: ' . htmlspecialchars($task['date_completion'], ENT_QUOTES, 'UTF-8') . '</li>';
+                                echo '<li class="list-group-item"><strong>Participants:</strong>';
+
+                                // Display participants
+                                echo '<ul>';
+                                foreach ($participants as $participant) {
+                                    echo '<li class="mb-2">' . htmlspecialchars($participant['username'], ENT_QUOTES, 'UTF-8') .
+                                        ' - Advancement: ' . htmlspecialchars($participant['advancement_perc'], ENT_QUOTES, 'UTF-8') . '%';
+                                        if ($project['role_name'] !== 'viewer') {
+                                            echo '<form method="post" style="display: inline;">
+                                            <input type="hidden" name="remove_user_task_id" value="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">
+                                            <input type="hidden" name="remove_user_task_user" value="' . htmlspecialchars($participant['username'], ENT_QUOTES, 'UTF-8') . '">
+                                            <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#removeUserModal" data-taskid="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '" data-username="' . htmlspecialchars($participant['username'], ENT_QUOTES, 'UTF-8') . '">Remove</button>
+                                            </form>';
+                                        }
+                                        echo '</li>';
+                                }
+                                echo '</ul></li>';
+
+                                if ($project['role_name'] !== 'viewer') {
+                                    echo '<li class="list-group-item">';
+                                    echo '<form method="post" class="d-inline">';
+                                    echo '<label for="addUserToTask' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '" class="form-label">Add User to Task</label>';
+                                    echo '<select id="addUserToTask' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '" name="username" class="form-select mt-2">';
+                                    
+                                    // Populate the dropdown with users
+                                    foreach ($users as $user) {
+                                        echo '<option value="' . htmlspecialchars($user['id_user'], ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($user['id_user'], ENT_QUOTES, 'UTF-8') . '</option>';
+                                    }
+                                    
+                                    echo '</select>';
+                                    echo '<button type="submit" class="btn btn-success btn-sm mt-2">Add User</button>';
+                                    echo '<input type="hidden" name="task_id" value="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">';
+                                    echo '</form>';
+                                    echo '</li>';
+                                }
+                                echo '</ul>';
+                                // Buttons section
+                                echo '<div class="card-body d-flex justify-content-between">';
+                                echo '<a href="taskdetail.php?id=' . urlencode($task['id']) . '" class="btn btn-primary btn-sm">View Details</a>';
+
+                                if ($project['role_name'] !== 'viewer') {
+                                    echo '<a href="edit-task.php?id=' . urlencode($task['id']) . '" class="btn btn-info btn-sm">Edit Task</a>';
+                                    echo '<button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteTaskModal" data-taskid="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">Delete Task</button>';
+                                }
+                                echo '</div>';
+
+                                echo '</div>';
+                                echo '</div>';
                             }
-                            echo '</ul>';
-                            // Buttons section
-                            echo '<div class="card-body d-flex justify-content-between">';
-                            echo '<a href="task-details.php?id=' . urlencode($task['id']) . '" class="btn btn-primary btn-sm">View Details</a>';
+                        ?>
+                        </div>
+                    <?php endif; ?>
+                    
 
-                            if ($project['role_name'] !== 'viewer') {
-                                echo '<a href="edit-task.php?id=' . urlencode($task['id']) . '" class="btn btn-secondary btn-sm">Edit Task</a>';
-                                echo '<button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteTaskModal" data-taskid="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">Delete Task</button>';
+                    <?php if (!empty($tasks)): ?>
+                        <div class="row mb-5 mt-5 text-center">
+                            <?php
+                            foreach ($tasks as $task) {
+                                if($task['is_completed'] == 0) {
+                                    continue;
+                                }
+                                // Fetch participants and their advancement percentages
+                                $participantsStmt = $conn->prepare("
+                                    SELECT u.username, ut.advancement_perc
+                                    FROM tm1_user_task ut
+                                    LEFT JOIN tm1_users u ON ut.id_user = u.username
+                                    WHERE ut.id_task = :taskId
+                                    ORDER BY ut.advancement_perc DESC
+                                ");
+                                $participantsStmt->bindParam(':taskId', $task['id'], PDO::PARAM_INT);
+                                $participantsStmt->execute();
+                                $participants = $participantsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                                // Fetch users for the project (username instead of user ID)
+                                $usersStmt = $conn->prepare("
+                                    SELECT id_user
+                                    FROM tm1_user_project 
+                                    WHERE id_project = :projectId
+                                ");
+                                $usersStmt->bindParam(':projectId', $task['id_project'], PDO::PARAM_INT);
+                                $usersStmt->execute();
+                                $users = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                                // Display task details in a card
+                                echo '<div class="col-md-3 d-flex mb-2">';
+                                echo '<div class="card flex-fill text-bg-secondary" style="width: 100%;">';
+
+                                echo '<div class="card-body">';
+                                echo '<h5 class="card-title">' . htmlspecialchars($task['title'], ENT_QUOTES, 'UTF-8'). '<strong> - COMPLETED</strong></h5>';
+                                echo '<p class="card-text">' . htmlspecialchars($task['description'], ENT_QUOTES, 'UTF-8') . '</p>';
+                                echo '<p class="card-text"><strong>Project: </strong>' . htmlspecialchars($task['project_title'], ENT_QUOTES, 'UTF-8') . '</p>';
+                                echo '</div>';
+
+                                echo '<ul class="list-group list-group-flush">';
+                                echo '<li class="list-group-item">Priority: ' . htmlspecialchars($task['priority_level'], ENT_QUOTES, 'UTF-8') . '</li>';
+                                echo '<li class="list-group-item">Created on: ' . htmlspecialchars($task['date_creation'], ENT_QUOTES, 'UTF-8') . '</li>';
+                                echo '<li class="list-group-item">Start Date: ' . htmlspecialchars($task['date_start'], ENT_QUOTES, 'UTF-8') . '</li>';
+                                echo '<li class="list-group-item">Due Date: ' . htmlspecialchars($task['date_completion'], ENT_QUOTES, 'UTF-8') . '</li>';
+                                echo '<li class="list-group-item"><strong>Participants:</strong>';
+
+                                // Display participants
+                                echo '<ul>';
+                                foreach ($participants as $participant) {
+                                    echo '<li class="mb-2">' . htmlspecialchars($participant['username'], ENT_QUOTES, 'UTF-8') .
+                                        ' - Advancement: ' . htmlspecialchars($participant['advancement_perc'], ENT_QUOTES, 'UTF-8') . '%';
+                                        if ($project['role_name'] !== 'viewer') {
+                                            echo '<form method="post" style="display: inline;">
+                                            <input type="hidden" name="remove_user_task_id" value="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">
+                                            <input type="hidden" name="remove_user_task_user" value="' . htmlspecialchars($participant['username'], ENT_QUOTES, 'UTF-8') . '">
+                                            <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#removeUserModal" data-taskid="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '" data-username="' . htmlspecialchars($participant['username'], ENT_QUOTES, 'UTF-8') . '">Remove</button>
+                                            </form>';
+                                        }
+                                        echo '</li>';
+                                }
+                                echo '</ul></li>';
+
+                                if ($project['role_name'] !== 'viewer') {
+                                    echo '<li class="list-group-item">';
+                                    echo '<form method="post" class="d-inline">';
+                                    echo '<label for="addUserToTask' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '" class="form-label">Add User to Task</label>';
+                                    echo '<select id="addUserToTask' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '" name="username" class="form-select mt-2">';
+                                    
+                                    // Populate the dropdown with users
+                                    foreach ($users as $user) {
+                                        echo '<option value="' . htmlspecialchars($user['id_user'], ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($user['id_user'], ENT_QUOTES, 'UTF-8') . '</option>';
+                                    }
+                                    
+                                    echo '</select>';
+                                    echo '<button type="submit" class="btn btn-success btn-sm mt-2">Add User</button>';
+                                    echo '<input type="hidden" name="task_id" value="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">';
+                                    echo '</form>';
+                                    echo '</li>';
+                                }
+                                echo '</ul>';
+                                // Buttons section
+                                echo '<div class="card-body d-flex justify-content-between">';
+                                echo '<a href="task-details.php?id=' . urlencode($task['id']) . '" class="btn btn-primary btn-sm">View Details</a>';
+
+                                if ($project['role_name'] !== 'viewer') {
+                                    echo '<a href="edit-task.php?id=' . urlencode($task['id']) . '" class="btn btn-info btn-sm">Edit Task</a>';
+                                    echo '<button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteTaskModal" data-taskid="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">Delete Task</button>';
+                                }
+                                echo '</div>';
+
+                                echo '</div>';
+                                echo '</div>';
                             }
-                            echo '</div>';
+                        ?>
+                        </div>
+                    <?php endif; ?>
 
-                            echo '</div>';
-                            echo '</div>';
-                        }
-                    ?>
-                    </div>
-
-
+                    <?php if (!empty($tasks)): ?>
+                        <div class="row mb-2 text-center">
+                            <div class="col-md-12 d-flex">
+                                <div class="card flex-fill shadow-sm" style="width: 100%;">
+                                    <div class="card-header">
+                                        <strong>Gantt</strong>
+                                    </div>
+                                    <div class="card-body">       
+                                        <div id="chart_div"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
 
                     <?php if ($project['role_name'] !== 'viewer'): ?>
                     <div class="row mb-2 text-center">
@@ -839,23 +1185,36 @@
                                                 <input type="number" class="form-control" id="taskPriority" name="priority" min="1" max="10" required>
                                             </div>
                                             <div class="mb-3">
+                                                <label for="taskStartDate" class="form-label"><strong>Start Date</strong></label>
+                                                <input type="date" class="form-control" id="taskStartDate" name="start_date" required>
+
+                                                <script>
+                                                // Set the minimum value for the start date input to tomorrow's date
+                                                const startDateInput = document.getElementById('taskStartDate');
+                                                const todayStart = new Date();
+                                                const tomorrowStart = new Date(todayStart);
+                                                tomorrowStart.setDate(todayStart.getDate() + 1); // Add 1 day to today's date
+                                                const minDateStart = tomorrowStart.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+                                                startDateInput.min = minDateStart;
+                                                </script>
+
+                                            </div>
+                                            <div class="mb-3">
                                                 <label for="taskDueDate" class="form-label"><strong>Due Date</strong></label>
                                                 <input type="date" class="form-control" id="taskDueDate" name="due_date" required>
-                                            </div>
 
-                                            <script>
+                                                <script>
                                                 // Set the minimum value for the due date input to tomorrow's date
                                                 const dueDateInput = document.getElementById('taskDueDate');
-                                                const today = new Date();
-                                                const tomorrow = new Date(today);
-                                                tomorrow.setDate(today.getDate() + 1); // Add 1 day to today's date
-                                                const minDate = tomorrow.toISOString().split('T')[0]; // Format as YYYY-MM-DD
-                                                dueDateInput.min = minDate;
-                                            </script>
-
+                                                const todayDue = new Date();
+                                                const tomorrowDue = new Date(todayDue);
+                                                tomorrowDue.setDate(todayDue.getDate() + 1); // Add 1 day to today's date
+                                                const minDateDue = tomorrowDue.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+                                                dueDateInput.min = minDateDue;
+                                                </script>
+                                            </div>
                                             <button type="submit" class="btn btn-primary">Create Task</button>
                                         </form>
-
                                 </div>
                             </div>
                         </div>
@@ -959,6 +1318,72 @@
         </div>
     </div>
 
+    <div class="modal fade" id="removeUserModal" tabindex="-1" aria-labelledby="removeUserModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="removeUserModalLabel">Confirm Removal</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to remove this user from the task? This action cannot be undone.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form id="removeUserForm" method="post" style="display: inline;">
+                        <input type="hidden" name="remove_user_task_id" id="removeUserTaskId" value="">
+                        <input type="hidden" name="remove_user_task_user" id="removeUserTaskUser" value="">
+                        <button type="submit" class="btn btn-danger">Remove User</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="removeUserProjModal" tabindex="-1" aria-labelledby="removeUserProjModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="removeUserProjModalLabel">Confirm Removal</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to remove this user from the project? This action cannot be undone.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form id="removeUserProjForm" method="post" action="" style="display: inline;">
+                        <input type="hidden" name="remove_user_proj_id" id="removeUserProjId" value="">
+                        <input type="hidden" name="remove_user_proj_user" id="removeUserProjUser" value="">
+                        <button type="submit" class="btn btn-danger">Remove User</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="quitUserProjModal" tabindex="-1" aria-labelledby="quitUserProjModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="quitUserProjModalLabel">Confirm Leaving</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to leave the project? This action cannot be undone.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form id="quitUserProjForm" method="post" action="" style="display: inline;">
+                        <input type="hidden" name="quit_user_proj_id" id="quitUserProjId" value="">
+                        <input type="hidden" name="quit_user_proj_user" id="quitUserProjUser" value="">
+                        <button type="submit" class="btn btn-danger">Leave Project</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Include jQuery and Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
@@ -991,6 +1416,45 @@
                 button.addEventListener("click", function() {
                     const taskId = this.getAttribute('data-taskid');
                     document.getElementById('deleteTaskId').value = taskId; // Set the task ID to the hidden input field
+                });
+            });
+        });
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const removeButtons = document.querySelectorAll('[data-bs-toggle="modal"][data-bs-target="#removeUserModal"]');
+
+            removeButtons.forEach(button => {
+                button.addEventListener("click", function() {
+                    const taskId = this.getAttribute('data-taskid');
+                    const username = this.getAttribute('data-username');
+                    document.getElementById('removeUserTaskId').value = taskId;
+                    document.getElementById('removeUserTaskUser').value = username;
+                });
+            });
+        });
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const removeButtons = document.querySelectorAll('[data-bs-toggle="modal"][data-bs-target="#removeUserProjModal"]');
+
+            removeButtons.forEach(button => {
+                button.addEventListener("click", function() {
+                    const projId = this.getAttribute('data-projid');
+                    const username = this.getAttribute('data-username');
+                    document.getElementById('removeUserProjId').value = projId;
+                    document.getElementById('removeUserProjUser').value = username;
+                });
+            });
+        });
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const quitButtons = document.querySelectorAll('[data-bs-toggle="modal"][data-bs-target="#quitUserProjModal"]');
+
+            quitButtons.forEach(button => {
+                button.addEventListener("click", function() {
+                    const projId = this.getAttribute('data-projid');
+                    const username = this.getAttribute('data-username');
+                    document.getElementById('quitUserProjId').value = projId;
+                    document.getElementById('quitUserProjUser').value = username;
                 });
             });
         });

@@ -51,6 +51,51 @@
     $stmt->execute();
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     $profile_picture = $row['pfp_image_url'] ?? "nopfp.png"; // Default if no profile picture
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_user_proj_id'], $_POST['remove_user_proj_user'])) {
+        $projId = $_POST['remove_user_proj_id'];
+        $username = $_POST['remove_user_proj_user'];
+    
+        // Start a transaction to ensure atomicity
+        $conn->beginTransaction();
+    
+        try {
+            // Step 1: Remove the user from the project
+            $stmt = $conn->prepare('DELETE FROM tm1_user_project WHERE id_project = :proj_id AND id_user = :username');
+            $stmt->bindValue(':proj_id', $projId, PDO::PARAM_INT);
+            $stmt->bindValue(':username', $username, PDO::PARAM_STR);
+            $stmt->execute();
+    
+            // Step 2: Remove the user from tasks associated with the project
+            $stmt = $conn->prepare('DELETE FROM tm1_user_task 
+                                    WHERE id_task IN (
+                                        SELECT id FROM tm1_tasks WHERE id_project = :proj_id
+                                    ) AND id_user = :username');
+            $stmt->bindValue(':proj_id', $projId, PDO::PARAM_INT);
+            $stmt->bindValue(':username', $username, PDO::PARAM_STR);
+            $stmt->execute();
+    
+            // Commit the transaction
+            $conn->commit();
+    
+            $_SESSION['toast'] = [
+                'type' => 'success',
+                'message' => 'User removed from project and associated tasks successfully!'
+            ];
+        } catch (Exception $e) {
+            // Roll back the transaction in case of an error
+            $conn->rollBack();
+    
+            $_SESSION['toast'] = [
+                'type' => 'danger',
+                'message' => 'Error: Could not remove user from project and tasks. ' . $e->getMessage()
+            ];
+        }
+    
+        // Redirect back to the project page
+        header("Location: leaveproj.php");
+        exit();
+    } 
 ?>
 
 <!doctype html>
@@ -224,9 +269,13 @@
                                             <li class="list-group-item">Creator ID: ' . htmlspecialchars($project['id_creator'], ENT_QUOTES, 'UTF-8') . '</li>
                                             <li class="list-group-item">Role: ' . htmlspecialchars($project['role_name'], ENT_QUOTES, 'UTF-8') . '</li>
                                         </ul>
-                                        <div class="card-body">
+                                        <div class="card-body d-flex align-items-center justify-content-between">
                                             <a href="proj.php?id=' . urlencode($project['id']) . '" class="card-link">View Details</a>
-                                            <a href="leaveproj.php?id=' . urlencode($project['id']) . '" class="card-link">Leave Project</a>
+                                            <form method="post">
+                                                <input type="hidden" name="remove_user_proj_id" value="' . htmlspecialchars($project['id'], ENT_QUOTES, 'UTF-8') . '">
+                                                <input type="hidden" name="remove_user_proj_user" value="' . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . '">
+                                                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#removeUserProjModal" data-projid="' . htmlspecialchars($project['id'], ENT_QUOTES, 'UTF-8') . '" data-username="' . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . '">Leave Project</button>
+                                            </form>
                                         </div>
                                     </div>
                                 </div>';
@@ -239,6 +288,44 @@
                     </div>
                 </div>
             </div>
+
+            <div class="modal fade" id="removeUserProjModal" tabindex="-1" aria-labelledby="removeUserProjModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="removeUserProjModalLabel">Confirm Removal</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            Are you sure you want to leave the project? This action cannot be undone.
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <form id="removeUserProjForm" method="post" action="" style="display: inline;">
+                                <input type="hidden" name="remove_user_proj_id" id="removeUserProjId" value="">
+                                <input type="hidden" name="remove_user_proj_user" id="removeUserProjUser" value="">
+                                <button type="submit" class="btn btn-danger">Leave Project</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                document.addEventListener("DOMContentLoaded", function() {
+                    const removeButtons = document.querySelectorAll('[data-bs-toggle="modal"][data-bs-target="#removeUserProjModal"]');
+
+                    removeButtons.forEach(button => {
+                        button.addEventListener("click", function() {
+                            const projId = this.getAttribute('data-projid');
+                            const username = this.getAttribute('data-username');
+                            document.getElementById('removeUserProjId').value = projId;
+                            document.getElementById('removeUserProjUser').value = username;
+                        });
+                    });
+                });
+            </script>
+
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
