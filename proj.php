@@ -1037,7 +1037,7 @@
                                 echo '<a href="taskdetail.php?id=' . urlencode($task['id']) . '" class="btn btn-primary btn-sm">View Details</a>';
 
                                 if ($project['role_name'] !== 'viewer') {
-                                    echo '<a href="edit-task.php?id=' . urlencode($task['id']) . '" class="btn btn-info btn-sm">Edit Task</a>';
+                                    echo '<a href="taskedit.php?id=' . urlencode($task['id']) . '" class="btn btn-info btn-sm">Edit Task</a>';
                                     echo '<button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteTaskModal" data-taskid="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">Delete Task</button>';
                                 }
                                 echo '</div>';
@@ -1135,7 +1135,7 @@
                                 echo '<a href="task-details.php?id=' . urlencode($task['id']) . '" class="btn btn-primary btn-sm">View Details</a>';
 
                                 if ($project['role_name'] !== 'viewer') {
-                                    echo '<a href="edit-task.php?id=' . urlencode($task['id']) . '" class="btn btn-info btn-sm">Edit Task</a>';
+                                    echo '<a href="taskedit.php?id=' . urlencode($task['id']) . '" class="btn btn-info btn-sm">Edit Task</a>';
                                     echo '<button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteTaskModal" data-taskid="' . htmlspecialchars($task['id'], ENT_QUOTES, 'UTF-8') . '">Delete Task</button>';
                                 }
                                 echo '</div>';
