@@ -114,6 +114,9 @@
 
         // Validate inputs
         if ($taskId && $advancementPerc !== false && $advancementPerc >= 0 && $advancementPerc <= 100) {
+
+            $conn->beginTransaction(); // Start transaction
+
             try {
                 // Update the user's advancement percentage for the task
                 $updateQuery = "UPDATE tm1_user_task 
@@ -126,10 +129,27 @@
                 $updateStmt->bindValue(':username', $username, PDO::PARAM_STR);
                 $updateStmt->execute();
 
-                // Success message (optional)
+                // Log the change in tm1_edits
+                $editQuery = "INSERT INTO tm1_edits (id, date_modification, time_modification, id_task, id_user) 
+                            VALUES (NULL, :date_modification, :time_modification, :task_id, :username)";
+
+                $editStmt = $conn->prepare($editQuery);
+                $editStmt->bindValue(':date_modification', date('Y-m-d'), PDO::PARAM_STR);
+                $editStmt->bindValue(':time_modification', date('H:i:s'), PDO::PARAM_STR);
+                $editStmt->bindValue(':task_id', $taskId, PDO::PARAM_INT);
+                $editStmt->bindValue(':username', $username, PDO::PARAM_STR);
+                $editStmt->execute();
+
+                // Commit the transaction
+                $conn->commit();
+
+                // Success message
                 $_SESSION['success_message'] = "Your progress has been updated successfully.";
             } catch (PDOException $e) {
-                // Error message (optional)
+                // Rollback the transaction on error
+                $conn->rollBack();
+
+                // Error message
                 $_SESSION['error_message'] = "Failed to update progress: " . $e->getMessage();
             }
         } else {
@@ -137,8 +157,8 @@
         }
 
         // Redirect back to avoid form re-submission
-        header("Location: " . $_SERVER['REQUEST_URI']);
-        exit();
+        header("Location: taskdetail.php?id=".$taskId);
+        exit;
     }
 ?>
 
@@ -314,6 +334,7 @@
                                     <?php else: ?>
                                         <p>No edits made yet.</p>
                                     <?php endif; ?>
+                                <a href="proj.php?id=<?= htmlspecialchars($task[0]['id_project'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-primary mt-3">Back to Project</a>
                                 </div>
                             </div>
                         </div>

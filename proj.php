@@ -591,8 +591,7 @@
             tasks.forEach(task => {
                 var startDate = new Date(task.date_start);
                 var endDate = new Date(task.date_completion);
-
-                if (endDate < now) {
+                if (endDate < now || task.is_completed == 1) {
                     // Past tasks
                     data.addRow([
                         task.id,

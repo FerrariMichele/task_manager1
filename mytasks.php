@@ -193,7 +193,7 @@
                                         <div class="card-body">
                                             <a href="taskdetail.php?id=' . urlencode($task['id']) . '" class="card-link">View Details</a>';
                                     if ($task['id_role'] != 3) {
-                                        echo '<a href="edit-task.php?id=' . urlencode($task['id']) . '" class="card-link">Edit Task</a>';
+                                        echo '<a href="taskedit.php?id=' . urlencode($task['id']) . '" class="card-link">Edit Task</a>';
                                     }
                                         echo '</div>
                                     </div>
