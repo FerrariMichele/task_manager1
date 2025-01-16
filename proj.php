@@ -53,17 +53,31 @@
         exit();
     }
 
-    // Fetch associated tasks
-    $query = 'SELECT DISTINCT t.id, t.title, t.description, t.date_creation, t.priority_level, t.date_start, t.date_completion, t.is_completed, t.id_project, p.title AS project_title
+    // Fetch associated tasks for a specific project
+    $query = 'SELECT DISTINCT 
+                    t.id, 
+                    t.title, 
+                    t.description, 
+                    t.date_creation, 
+                    t.priority_level, 
+                    t.date_start, 
+                    t.date_completion, 
+                    t.is_completed, 
+                    t.id_project, 
+                    p.title AS project_title
                 FROM tm1_tasks t
                 JOIN tm1_projects p ON t.id_project = p.id
-                ORDER BY t.date_completion
-                ';
-
+                WHERE p.id = :id
+                ORDER BY t.date_completion;';
+    // Prepare the query
     $stmt = $conn->prepare($query);
+    // Bind the project ID parameter to the query
     $stmt->bindValue(":id", $id, PDO::PARAM_INT);
+    // Execute the query
     $stmt->execute();
+    // Fetch all the associated tasks
     $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_role'])) {
         $projectId = filter_input(INPUT_POST, 'project_id', FILTER_VALIDATE_INT);
@@ -226,7 +240,7 @@
 
             // Step 5: Delete files from tm1_project_files (files related to the project)
             $stmt = $conn->prepare('SELECT filename FROM tm1_project_files WHERE id_project = :projectId');
-            $stmt->bindParam(':projectId', $projectId, PDO::PARAM_);
+            $stmt->bindParam(':projectId', $projectId, PDO::PARAM_INT);
             $stmt->execute();
     
             // Step 6: Finally, delete the project from tm1_projects
